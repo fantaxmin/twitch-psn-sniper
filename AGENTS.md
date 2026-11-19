@@ -37,6 +37,14 @@ real de mensajes. No declares completada una comprobación que no hayas ejecutad
 
 Usa el objetivo indicado en la conversación. Si no se conoce, pregunta si la
 persona quiere Kick, el bot de chat de Twitch o ambos antes de configurar servicios.
+Si proporciona una URL, identifica su plataforma y extrae el canal de la ruta:
+`https://kick.com/CANAL` o `https://www.twitch.tv/CANAL`. Usa ese nombre en
+`--channel CANAL` (Kick) o `--chat CANAL` (Twitch), y la URL en `--source`.
+No basta con cambiar `--source`: no actualiza el nombre del canal. Pasa siempre
+el canal explícitamente en los comandos; no asumas los destinos predeterminados.
+Mantén el mismo canal en la captura y el comando final. En Kick, úsalo también
+en el lanzador y el diagnóstico. El lanzador de Twitch abre un canal predeterminado;
+abre la URL elegida en esa misma ventana del perfil dedicado.
 
 - **Kick:** entrada `python -m sniper.kick`; detecta códigos PSN del vídeo y puede
   canjearlos con un máximo de un éxito. Seguir los pasos de Kick que aparecen abajo.
@@ -64,13 +72,13 @@ persona quiere Kick, el bot de chat de Twitch o ambos antes de configurar servic
 6. **Región**: pregunta el país de la cuenta PSN. Si no es Colombia, ajusta
    `STORE_URL` en `sniper/browser.py` (`es-co` -> `es-mx`, `en-us`, ...).
 7. **Zona del código**: con el stream mostrando el sorteo, corre
-   `python -m sniper.kick --dry-run` y revisa los candidatos en
+   `python -m sniper.kick --channel CANAL --dry-run` y revisa los candidatos en
    `runs/kick-CANAL/*/events.jsonl`. Propón un `--roi X0 Y0 X1 Y1` (0..1) que cubra
    solo el widget, sin chat ni alertas. Considera `--require-label`.
 8. **Pruebas**: `python -m pip install pytest && python -m pytest -q`. Las pruebas
    que necesitan capturas del stream se saltan si `tests/fixtures/` no existe.
 9. **Entrega**: deja a la persona el comando final
-   `python -m sniper.kick --redeem --roi X0 Y0 X1 Y1` para que **ella** lo ejecute.
+   `python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1` para que **ella** lo ejecute.
 
 ## Pasos de configuración del bot de chat de Twitch
 

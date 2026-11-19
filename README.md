@@ -1,13 +1,114 @@
-# Alternativa Kick para elded
+# Bot de streams: códigos en Kick y chat de Twitch
 
-Lee códigos PSN del vídeo con OCR y se retira al confirmar un canje exitoso.
-El modo predeterminado solo detecta y registra candidatos; `--redeem` activa
-el canje real. No lee ni escribe en el chat de Kick.
+Dos funciones independientes: detectar y canjear códigos PSN del vídeo de Kick,
+y enviar mensajes periódicos al chat de Twitch. Elige el canal en cada comando;
+no hace falta editar el código para cambiar de streamer. El modo de Kick se retira
+tras un canje exitoso. El bot de chat no busca ni canjea códigos.
+
+## Comandos a mano
+
+[Kick en Linux](#kick--linux) · [Kick en Windows](#kick--windows-powershell) ·
+[Chat de Twitch](#bot-de-chat-de-twitch--linux) ·
+[Instalación Linux](#instalación-en-linux) · [Instalación Windows](#instalación-en-windows) ·
+[Configuración con IA](#configuración-asistida-con-agentsmd) ·
+[Límites y recuperación](#límites-y-recuperación)
+
+Si ya instalaste el proyecto, empieza aquí. Ejecuta los comandos desde la carpeta
+del repositorio. Sustituye `tu_canal` por el nombre que aparece en la URL del stream;
+por ejemplo, para `https://kick.com/elmune`, el canal es `elmune`.
+Pasa siempre `--channel` en Kick o `--chat` en Twitch para elegir el destino.
+
+### Kick · Linux
+
+Cambia `STREAM_CHANNEL` una vez y usa el mismo valor en diagnóstico, captura y canje:
+
+```bash
+STREAM_CHANNEL="tu_canal"
+STREAM_URL="https://kick.com/$STREAM_CHANNEL"
+
+# Abrir el canal en el perfil dedicado; inicia sesión en PSN manualmente:
+scripts/launch_brave.sh --kick "$STREAM_CHANNEL"
+# Comprobar dependencias, Brave y registros:
+uv run python -m sniper.doctor --kick "$STREAM_CHANNEL"
+# Detectar códigos sin canjear:
+uv run python -m sniper.kick --channel "$STREAM_CHANNEL" --source "$STREAM_URL" --dry-run
+```
+
+Para activar el canje, sustituye `X0 Y0 X1 Y1` por las coordenadas comprobadas del widget:
+
+```bash
+uv run python -m sniper.kick --channel "$STREAM_CHANNEL" --source "$STREAM_URL" --redeem --roi X0 Y0 X1 Y1
+```
+
+### Kick · Windows (PowerShell)
+
+Con el entorno virtual activado:
+
+```powershell
+$streamChannel = "tu_canal"
+$streamUrl = "https://kick.com/$streamChannel"
+
+# Abrir el perfil dedicado e iniciar sesión en PSN manualmente:
+.\scripts\launch_brave.ps1 -KickStream -Channel $streamChannel
+# También puedes abrirlo desde CMD: scripts\launch_brave.bat --kick tu_canal
+python -m sniper.doctor --kick $streamChannel
+python -m sniper.kick --channel $streamChannel --source $streamUrl --dry-run
+```
+
+Canje real, con las coordenadas ajustadas al stream:
+
+```powershell
+python -m sniper.kick --channel $streamChannel --source $streamUrl --redeem --roi X0 Y0 X1 Y1
+```
+
+### Bot de chat de Twitch · Linux
+
+```bash
+STREAM_CHANNEL="tu_canal"
+STREAM_URL="https://www.twitch.tv/$STREAM_CHANNEL"
+
+# Abrir el perfil dedicado de Brave:
+scripts/launch_brave.sh
+```
+
+El lanzador sin opciones abre un canal predeterminado. En esa misma ventana,
+abre la URL de `STREAM_URL` e inicia sesión en Twitch. El bot selecciona el canal
+que indiques con `--chat`, aunque la pestaña inicial fuera de otro streamer.
+
+```bash
+# Vista previa: no conecta a Brave ni envía mensajes:
+uv run python -m sniper.daemon --chat "$STREAM_CHANNEL" --source "$STREAM_URL" --dry-run
+# Envío real de un mensaje cada 5 minutos:
+uv run python -m sniper.daemon --chat "$STREAM_CHANNEL" --source "$STREAM_URL" --chat-interval 300
+```
+
+`420` equivale a 7 minutos. `Ctrl+C` detiene cualquiera de los procesos.
+La ejecución real del bot de chat reemplaza borradores existentes en el cuadro de envío.
+No hay bot de chat para Kick; el modo de chat conserva su alcance de Linux.
+
+### Cambiar de streamer usando su URL
+
+Elige el nombre que sigue al dominio y usa la misma plataforma y canal en todos
+los pasos. Ejemplo de detección para `elmune`, sin depender del canal predeterminado:
+
+```bash
+uv run python -m sniper.kick --channel elmune --source https://kick.com/elmune --dry-run
+```
+
+Si prefieres que la IA prepare los comandos, basta con darle la URL y la función:
+
+> Lee AGENTS.md y prepara la detección de códigos para https://kick.com/elmune. Configura el entorno y prueba sin canjear.
+
+> Lee AGENTS.md y prepara el bot de chat para https://www.twitch.tv/CANAL, cada 5 minutos. Empieza con la vista previa sin enviar mensajes.
+
+El CLI espera el nombre en `--channel`/`--chat` y la URL en `--source`; pasar solo
+`--source` no cambia el nombre del canal. No uses URLs de clips o VOD para el modo real.
+Cambiar de streamer conserva el límite de un éxito y los resultados pendientes.
 
 ## Tus datos: qué hay que configurar
 
-El proyecto **no guarda ni pide** tu correo, contraseña, `accountId` de PSN ni
-tokens en ningún archivo. No hay `.env` ni archivo de credenciales que llenar.
+No necesitas escribir tu correo, contraseña, `accountId` de PSN ni tokens en
+archivos del proyecto. No hay `.env` ni archivo de credenciales que llenar.
 La cuenta se toma de la sesión que abras a mano en un perfil dedicado de Brave:
 
 | Dato | Dónde va | Cómo |
@@ -15,7 +116,7 @@ La cuenta se toma de la sesión que abras a mano en un perfil dedicado de Brave:
 | Correo y contraseña de PSN | Perfil dedicado de Brave | Lanza Brave con `scripts/launch_brave.sh` (Linux) o `scripts\launch_brave.ps1` (Windows) e inicia sesión en store.playstation.com. El perfil queda en `~/.local/share/twitch-psn-sniper/brave-profile` o `%LOCALAPPDATA%\twitch-psn-sniper\brave-profile`. |
 | Región de la tienda | URL de canje | Por defecto `es-co` (Colombia). Si tu cuenta es de otra región, cambia `STORE_URL` en `sniper/browser.py` (p. ej. `es-mx`, `en-us`). |
 | `accountId` / ID en línea | Ninguno | PSN lo obtiene de la sesión; no hace falta escribirlo. |
-| Canal a vigilar | Línea de comandos | `--channel elded` en `sniper.kick`, o `--kick CANAL` en `doctor` y los lanzadores. |
+| Canal a vigilar | Línea de comandos | `--channel CANAL` en `sniper.kick`; `--chat CANAL` en `sniper.daemon`; `--kick CANAL` en `doctor` y el lanzador de Linux, o `-KickStream -Channel CANAL` en PowerShell. |
 | Zona del código en pantalla | Línea de comandos | `--roi X0 Y0 X1 Y1` (ver "Preparar el canje"). |
 
 Todo lo que el programa genera (registro de intentos, capturas del modal de PSN,
@@ -36,9 +137,9 @@ en Brave se hace a mano; el canje y el envío real de mensajes se activan cuando
 
 Abre el proyecto con tu asistente de código y dale una de estas instrucciones:
 
-> Lee AGENTS.md y configura la alternativa Kick para elded. Prueba la detección sin canjear.
+> Lee AGENTS.md y configura la alternativa Kick para https://kick.com/CANAL. Prueba la detección sin canjear.
 
-> Lee AGENTS.md y configura el bot de chat de Twitch para rubius, cada 5 minutos. Usa primero la vista previa sin enviar mensajes.
+> Lee AGENTS.md y configura el bot de chat de Twitch para https://www.twitch.tv/CANAL, cada 5 minutos. Usa primero la vista previa sin enviar mensajes.
 
 La guía distingue las dos funciones: Kick utiliza PSN y OCR; el bot de chat usa
 tu sesión de Twitch y puede reaccionar con emotes sin configurar PSN ni modelos OCR.
@@ -60,16 +161,16 @@ Para tener `streamlink.exe` en PATH, activar el entorno:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m sniper.doctor --kick elded
-python -m sniper.kick
+python -m sniper.doctor --kick CANAL
+python -m sniper.kick --channel CANAL
 ```
 
 Si la política de PowerShell impide activar el entorno, se puede trabajar desde CMD:
 
 ```bat
 .venv\Scripts\activate.bat
-python -m sniper.doctor --kick elded
-python -m sniper.kick
+python -m sniper.doctor --kick CANAL
+python -m sniper.kick --channel CANAL
 ```
 
 Los modelos OCR deben estar disponibles localmente para que `doctor` los pruebe.
@@ -88,8 +189,8 @@ Con `uv` y Brave instalados:
 
 ```bash
 uv sync
-uv run python -m sniper.doctor --kick elded
-uv run python -m sniper.kick
+uv run python -m sniper.doctor --kick CANAL
+uv run python -m sniper.kick --channel CANAL
 ```
 
 También se puede usar un entorno virtual con `pip install -r requirements.txt`
@@ -98,12 +199,12 @@ para la variante CPU. La configuración histórica de `uv` utiliza ONNX Runtime 
 ## Comprobar el entorno
 
 ```bash
-python -m sniper.doctor --kick elded
-python -m sniper.doctor --kick elded --json
+python -m sniper.doctor --kick CANAL
+python -m sniper.doctor --kick CANAL --json
 ```
 
 El diagnóstico muestra `✓`, `!` o `✗`, una sugerencia para cada problema y un resumen.
-Devuelve 1 si hay errores. Sin `--kick`, comprueba la URL de Twitch de rubius.
+Devuelve 1 si hay errores. Sin `--kick`, comprueba una URL predeterminada de Twitch; no permite elegir otro canal de Twitch.
 Verifica importaciones y versiones, Streamlink, reconocimiento de un código sintético,
 Brave, el endpoint HTTP local de CDP, permisos, registros y disponibilidad de candados.
 
@@ -118,8 +219,8 @@ Los permisos de escritura se revisan sin crear un archivo de prueba.
 Primero comprobar el formato del sorteo y probar la detección sin canjear:
 
 ```bash
-python -m sniper.kick --dry-run
-python -m sniper.kick --source video.mp4 --once
+python -m sniper.kick --channel CANAL --dry-run
+python -m sniper.kick --channel CANAL --source video.mp4 --once
 ```
 
 En real, usar `--roi X0 Y0 X1 Y1` ajustado al widget, excluyendo chat y alertas.
@@ -132,14 +233,14 @@ Abrir manualmente el perfil dedicado y autenticar PSN:
 
 ```bash
 # Linux
-scripts/launch_brave.sh --kick elded
+scripts/launch_brave.sh --kick CANAL
 ```
 
 ```powershell
 # Windows PowerShell
-.\scripts\launch_brave.ps1 -KickStream -Channel elded
+.\scripts\launch_brave.ps1 -KickStream -Channel CANAL
 # Windows, mediante el lanzador BAT
-.\scripts\launch_brave.bat --kick elded
+.\scripts\launch_brave.bat --kick CANAL
 ```
 
 En Windows el perfil se guarda en
@@ -149,7 +250,7 @@ PATH, Program Files y LOCALAPPDATA. CDP escucha en `127.0.0.1:9333`.
 Una vez elegida la zona, activar el canje con las coordenadas comprobadas:
 
 ```bash
-python -m sniper.kick --redeem --roi X0 Y0 X1 Y1
+python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1
 ```
 
 Sustituir `X0 Y0 X1 Y1` por números. El programa exige al menos dos escaneos
@@ -176,7 +277,7 @@ Para resolver un timeout, detener el proceso y comprobar el resultado en la cuen
 Después actualizar el registro correspondiente, sin reenviar el código:
 
 ```bash
-python scripts/redeem_cli.py --runs-dir runs/kick-elded --resolve XXXX-XXXX-XXXX --as already_used
+python scripts/redeem_cli.py --runs-dir runs/kick-CANAL --resolve XXXX-XXXX-XXXX --as already_used
 ```
 
 Usar el estado realmente comprobado y la ruta que aparezca en el registro de ejecución.
@@ -198,9 +299,9 @@ visión local con Ollama; si no está disponible, recurre a emotes.
 
 ```bash
 # Vista previa sin conectar a Brave ni enviar mensajes:
-uv run python -m sniper.daemon --dry-run
+uv run python -m sniper.daemon --chat CANAL --dry-run
 # Envío real a Twitch, después de iniciar sesión manualmente:
-uv run python -m sniper.daemon --chat rubius --chat-interval 300
+uv run python -m sniper.daemon --chat CANAL --chat-interval 300
 ```
 
 Esta parte del proyecto conserva su alcance de Linux; no está incluida en la
