@@ -86,6 +86,8 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
 1. **Entorno:** en Linux, comprobar Python >= 3.12 e instalar las dependencias
    con `uv sync` según `README.md`.
 2. **Canal e intervalo:** usar el canal pedido (`--chat`, por defecto `rubius`).
+   `--chat` es el canal del streamer, no el usuario que inicia sesión; debe
+   coincidir con el canal de `--source`. La cuenta se toma de la sesión de Brave.
    El intervalo predeterminado es 300 segundos; `--chat-interval` admite al menos
    30 segundos. Confirmar las preferencias que falten antes de activar envíos.
 3. **Reacciones:** la visión con Ollama es local y opcional. Para elegir un modelo

@@ -63,6 +63,12 @@ uv run python -m sniper.kick --channel $streamChannel --source $streamUrl --rede
 
 ### Bot de chat de Twitch · Linux
 
+`--chat` indica el canal del streamer donde se enviarán los mensajes, no tu
+nombre de usuario. Tu identidad se obtiene de la sesión de Twitch abierta en el
+perfil dedicado de Brave. El canal de `--chat` y el de `--source` deben coincidir:
+si miras `https://www.twitch.tv/rubius`, usa `--chat rubius` aunque tu cuenta tenga
+otro nombre. `180` segundos equivale a un mensaje cada 3 minutos.
+
 ```bash
 STREAM_CHANNEL="tu_canal"
 STREAM_URL="https://www.twitch.tv/$STREAM_CHANNEL"
