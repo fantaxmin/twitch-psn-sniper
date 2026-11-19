@@ -10,8 +10,9 @@ from sniper import setup
 
 
 def config(mode="twitch-chat"):
-    return {"version": 1, "mode": mode, "twitch_user": "mi_usuario", "kick_user": "mi_cuenta",
+    return {"version": 2, "mode": mode, "twitch_user": "mi_usuario", "kick_user": "mi_cuenta",
             "psn_online_id": "MiAliasPSN", "channel": "streamer", "interval": 180,
+            "raffle_users": [], "raffle_min_users": 2,
             "roi": [0.1, 0.2, 0.9, 0.8] if mode == "kick-codes" else None}
 
 
@@ -152,7 +153,7 @@ def test_windows_launch_uses_dedicated_profile_and_kick(monkeypatch, tmp_path):
 
 def test_wizard_records_accounts_separately_from_target(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
-    answers = iter(["1", "my_twitch", "my_kick", "PSNAlias", "https://www.twitch.tv/STREAMER", "180", "3"])
+    answers = iter(["1", "my_twitch", "my_kick", "PSNAlias", "https://www.twitch.tv/STREAMER", "180", "", "3"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     saved, action = setup.wizard()
     assert saved["twitch_user"] == "my_twitch" and saved["channel"] == "streamer"
@@ -175,3 +176,33 @@ def test_local_config_is_gitignored():
     result = subprocess.run(["git", "check-ignore", ".sniper-local.json"], cwd=setup.ROOT,
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0
+
+
+def test_legacy_config_migrates_without_losing_accounts_or_rewriting_file(tmp_path):
+    legacy = config()
+    legacy["version"] = 1
+    legacy.pop("raffle_users")
+    legacy.pop("raffle_min_users")
+    path = tmp_path / ".sniper-local.json"
+    path.write_text(json.dumps(legacy))
+    saved = setup.load_config(path)
+    assert saved == config()
+    assert json.loads(path.read_text()) == legacy
+
+
+def test_wizard_configures_watched_users_and_three_minute_schedule(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    answers = iter(["1", "my_twitch", "", "", "streamer", "300", "mod_two, @MOD_ONE", "2", "3"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    saved, action = setup.wizard()
+    assert saved["raffle_users"] == ["mod_one", "mod_two"]
+    assert saved["interval"] == 180 and action == "3"
+    cmd = setup.build_command(saved)
+    assert "--raffle-users" in cmd and "--dry-run" in cmd
+
+
+def test_own_account_cannot_confirm_its_own_raffle():
+    saved = config()
+    saved["raffle_users"] = ["mi_usuario", "mod_two"]
+    with pytest.raises(ValueError, match="propia cuenta"):
+        setup.validate(saved)

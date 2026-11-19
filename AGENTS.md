@@ -43,6 +43,14 @@ arranca en simulación; `--run --real` abre automáticamente el perfil dedicado 
 hace falta, reutiliza las sesiones existentes y arranca el bot elegido. Si falta
 autenticación, debe terminar con error antes de la captura o los envíos.
 No ejecutar el modo real para probar la configuración sin petición del usuario.
+El modo Twitch permite una lista opcional de usuarios vigilados para rifas.
+Exige coincidencia literal de 2 (o 3) usuarios distintos de esa lista, con rol
+moderador/broadcaster, en 60 segundos. La secuencia es hasta dos intentos de frase
+a intervalos de 180 segundos y un turno normal posterior. Se usa el contador
+existente, sin envíos paralelos. El registro privado `runs/raffle-CANAL.json`
+conserva límites entre reinicios. La lista vacía lo desactiva; nunca añadir nombres
+reales al código ni a las pruebas. La configuración v1 se migra en memoria a v2
+con rifas desactivadas; guardar desde setup conserva las cuentas y preferencias.
 
 Usa el objetivo indicado en la conversación. Si no se conoce, pregunta si la
 persona quiere Kick, el bot de chat de Twitch o ambos antes de configurar servicios.

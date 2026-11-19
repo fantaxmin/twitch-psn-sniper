@@ -38,11 +38,27 @@ def target(value, platform):
 
 
 def validate(config):
-    keys = {"version", "mode", "twitch_user", "kick_user", "psn_online_id", "channel", "interval", "roi"}
-    if not isinstance(config, dict) or set(config) != keys or config.get("version") != 1:
+    base_keys = {"version", "mode", "twitch_user", "kick_user", "psn_online_id", "channel", "interval", "roi"}
+    if isinstance(config, dict) and config.get("version") == 1 and set(config) == base_keys:
+        config = {**config, "version": 2, "raffle_users": [], "raffle_min_users": 2}
+    keys = base_keys | {"raffle_users", "raffle_min_users"}
+    if not isinstance(config, dict) or set(config) != keys or config.get("version") != 2:
         raise ValueError("Configuración desconocida; vuelve a ejecutar el asistente")
     if config["mode"] not in {"twitch-chat", "kick-codes"}:
         raise ValueError("Modo desconocido")
+    from .raffle import watched_users
+    users = config["raffle_users"]
+    if not isinstance(users, list) or any(not isinstance(user, str) for user in users) or watched_users(users) != users:
+        raise ValueError("Lista de usuarios vigilados inválida")
+    if type(config["raffle_min_users"]) is not int or config["raffle_min_users"] not in {2, 3}:
+        raise ValueError("La confirmación de rifas debe ser de 2 o 3 usuarios")
+    if users:
+        if config["mode"] != "twitch-chat" or len(users) < config["raffle_min_users"]:
+            raise ValueError("Las rifas requieren chat de Twitch y suficientes usuarios vigilados distintos")
+        if config["twitch_user"] in users:
+            raise ValueError("Tu propia cuenta no debe estar en la lista vigilada")
+        if config["interval"] != 180:
+            raise ValueError("El modo de rifas utiliza intervalos de 180 segundos")
     for key, platform in (("twitch_user", "twitch"), ("kick_user", "kick")):
         value = config[key]
         if not isinstance(value, str):
@@ -73,7 +89,7 @@ def load_config(path=None):
 
 
 def save_config(config, path=None):
-    validate(config)
+    config = validate(config)
     path = Path(path) if path is not None else CONFIG
     fd, temporary = tempfile.mkstemp(prefix=".sniper-local-", suffix=".tmp", dir=path.parent)
     try:
@@ -119,7 +135,7 @@ def ensure_browser(url, *, timeout=15):
 
 
 def build_command(config, *, real=False):
-    validate(config)
+    config = validate(config)
     if config["mode"] == "twitch-chat":
         if sys.platform == "win32":
             raise ValueError("El bot de chat está disponible para Linux; Windows cubre los códigos de Kick")
@@ -128,6 +144,8 @@ def build_command(config, *, real=False):
                "--chat-interval", str(config["interval"]), "--wait-first"]
         if not real:
             cmd.append("--dry-run")
+        if config["raffle_users"]:
+            cmd.extend(["--raffle-users", *config["raffle_users"], "--raffle-min-users", str(config["raffle_min_users"])])
         return cmd
     channel, url = target(config["channel"], "kick")
     cmd = [sys.executable, "-m", "sniper.kick", "--channel", channel, "--source", url]
@@ -180,7 +198,8 @@ def wizard(previous=None):
             raise ValueError("El bot de chat conserva su alcance de Linux")
         return value
     selected = ask("Modo", "2" if previous.get("mode") == "kick-codes" or sys.platform == "win32" else "1", check=choice)
-    config = {"version": 1, "mode": "twitch-chat" if selected == "1" else "kick-codes"}
+    config = {"version": 2, "mode": "twitch-chat" if selected == "1" else "kick-codes",
+              "raffle_users": [], "raffle_min_users": 2}
     for key, platform, label in (("twitch_user", "twitch", "Tu usuario de Twitch"),
                                  ("kick_user", "kick", "Tu usuario de Kick")):
         config[key] = ask(label + " (opcional, referencia)", previous.get(key, ""),
@@ -202,6 +221,24 @@ def wizard(previous=None):
                 raise ValueError("Usa al menos 30 segundos")
             return number
         config["interval"] = ask("Segundos entre mensajes", str(previous.get("interval", 300)), check=interval)
+        from .raffle import watched_users
+        def watch_list(value):
+            users = watched_users(value.replace(",", " ").split()) if value not in {"", "-"} else []
+            if users and (len(users) < 2 or config["twitch_user"] in users):
+                raise ValueError("Escribe al menos 2 usuarios distintos y no incluyas tu propia cuenta")
+            return users
+        config["raffle_users"] = ask(
+            "Usuarios de rifa vigilados, separados por coma (vacío desactiva; '-' borra la lista)",
+            ",".join(previous.get("raffle_users", [])), check=watch_list)
+        if config["raffle_users"]:
+            def minimum(value):
+                number = int(value)
+                if number not in {2, 3} or number > len(config["raffle_users"]):
+                    raise ValueError("Elige 2 o 3, sin superar el tamaño de la lista")
+                return number
+            config["raffle_min_users"] = ask("Usuarios distintos que deben coincidir", str(previous.get("raffle_min_users", 2)), check=minimum)
+            config["interval"] = 180
+            print("Rifas activadas: dos turnos de frase separados por 3 minutos; el tercero será una reacción normal.")
     config["roi"] = None
     if selected == "2":
         def roi(value):

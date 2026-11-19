@@ -51,6 +51,7 @@ class ChatDaemon:
         sender = None
         capture = None
         task = None
+        listener = None
         try:
             if not self.args.dry_run:
                 session = ChatBrowserSession()
@@ -61,9 +62,21 @@ class ChatDaemon:
             capture = StreamCapture(self.args.source, self.frames, quality=self.args.quality,
                                     stop=self.stop, once=self.args.once,
                                     stderr_log=self.run_dir / "streamlink.log")
+            composer = ReactionComposer(self.args.vision_model)
+            if self.args.raffle_users:
+                from .raffle import RaffleComposer, RaffleLedger
+                from .raffle_chat import watch_messages
+                composer = RaffleComposer(
+                    composer, self.args.raffle_users, minimum=self.args.raffle_min_users,
+                    ledger=RaffleLedger(None if self.args.dry_run else RUNS / f"raffle-{self.args.chat}.json"),
+                    event=self.event)
+                listener = asyncio.create_task(watch_messages(
+                    self.args.chat, composer.observe, stop=self.stop, on_reset=composer.reset))
+                log.info("Rifas: 2 turnos de frase, separados por 180 s; tercero normal. Confirmación: %d usuarios distintos",
+                         self.args.raffle_min_users)
             participation = ChatParticipation(
                 frames=self.frames, capture=capture, stop=self.stop, sender=sender,
-                composer=ReactionComposer(self.args.vision_model), interval=self.args.chat_interval,
+                composer=composer, interval=self.args.chat_interval,
                 dry_run=self.args.dry_run, event=self.event, status_display=self.status_display,
                 wait_first=self.args.wait_first)
             capture.start()
@@ -71,15 +84,20 @@ class ChatDaemon:
             log.info("Solo chat #%s, cada %.0f s. Ctrl+C para detener. Registro: %s",
                      self.args.chat, self.args.chat_interval, self.run_dir)
             while not self.stop.is_set() and capture.is_alive():
+                if listener is not None and listener.done():
+                    await listener
+                    break
                 if task.done():
                     await task
                     break
                 await asyncio.sleep(0.5)
         finally:
             self.stop.set()
-            if task is not None:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
+            tasks = [value for value in (task, listener) if value is not None]
+            for value in tasks:
+                value.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
             try:
                 if capture is not None:
                     await asyncio.to_thread(capture.close)
@@ -100,6 +118,10 @@ def parse_args(argv=None):
     parser.add_argument("--chat", default="rubius", help="Canal de Twitch (por defecto rubius)")
     parser.add_argument("--chat-interval", type=float, default=300, help="Segundos entre mensajes (300=5 min, 420=7 min)")
     parser.add_argument("--wait-first", action="store_true", help="Inicia con la cuenta regresiva antes del primer mensaje")
+    parser.add_argument("--raffle-users", nargs="+", default=[], metavar="USUARIO",
+                        help="Lista de moderadores vigilados; activa dos frases y un turno normal, cada 180 s")
+    parser.add_argument("--raffle-min-users", type=int, choices=(2, 3), default=2,
+                        help="Usuarios distintos de la lista que deben repetir la frase en 60 s (2 por defecto)")
     parser.add_argument("--source", help="Stream para contexto visual; por defecto el canal elegido")
     parser.add_argument("--quality", default="1080p60,1080p,best")
     parser.add_argument("--vision-model", help="Modelo de visión local de Ollama; si falta, se usan emotes")
@@ -110,6 +132,17 @@ def parse_args(argv=None):
     if not re.fullmatch(r"[a-zA-Z0-9_]{1,25}", args.chat):
         parser.error("--chat debe ser un nombre de canal válido")
     args.chat = args.chat.lower()
+    if args.raffle_users:
+        from .raffle import watched_users
+        try:
+            args.raffle_users = watched_users([name for value in args.raffle_users
+                                               for name in value.replace(",", " ").split()])
+        except ValueError as exc:
+            parser.error(str(exc))
+        if len(args.raffle_users) < args.raffle_min_users:
+            parser.error("La lista de rifas necesita suficientes usuarios distintos para confirmar la frase")
+        args.chat_interval = 180
+        args.wait_first = True
     if not math.isfinite(args.chat_interval) or args.chat_interval < 30:
         parser.error("--chat-interval debe ser un número finito de al menos 30 segundos")
     args.source = args.source or "https://www.twitch.tv/" + args.chat

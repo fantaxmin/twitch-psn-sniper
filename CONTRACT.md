@@ -69,6 +69,17 @@ Por petición del usuario, `python -m sniper.daemon` ahora solo envía mensajes
 periódicos a Twitch. Conserva el contador, los registros y la captura como contexto
 visual para las reacciones. Solo necesita la sesión de Twitch en Brave.
 
+Las rifas son opcionales: `--raffle-users` habilita un lector IRC independiente
+solo de lectura y un compositor que exige 2 o 3 usuarios distintos de la lista,
+con rol moderador/broadcaster, repitiendo una frase literal corta dentro de 60 s.
+No lee códigos PSN ni susurros. Se activa en `sniper.setup` y obliga al intervalo
+de 180 s: dos turnos de frase y luego uno normal; el lector no llama al remitente.
+`runs/raffle-CANAL.json` guarda reservas previas al envío, máximo 2 por frase,
+con separación mínima de 180 s y turno normal pendiente entre reinicios.
+La simulación usa un registro en memoria. El lector valida canal, login IRC,
+rol, ID y fecha del mensaje; al reconectar borra confirmaciones en memoria.
+La configuración local pasa a v2 con lista vacía al leer un archivo v1.
+
 El daemon activo no importa ni ejecuta el redeemer, el detector OCR, el lector de
 códigos del chat ni el lector de susurros. No abre PlayStation Store y no termina
 por códigos, canjes o susurros; se detiene con Ctrl+C o al terminar la captura.

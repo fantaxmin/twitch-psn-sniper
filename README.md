@@ -31,6 +31,45 @@ del código. Al terminar, eliges vista previa, arranque real o solo guardar.
 El arranque de chat empieza con la cuenta regresiva antes del primer mensaje.
 En Kick arranca la captura; el canje real requiere una ROI configurada.
 
+En modo Twitch también puedes indicar una lista de usuarios vigilados para rifas
+(separados por comas, al menos dos). Una lista vacía desactiva esta función;
+escribe `-` para borrar una lista guardada. La configuración anterior se conserva
+al actualizar; las preferencias antiguas se leen con rifas desactivadas.
+
+#### Frases para entrar a rifas de Twitch
+
+Si dos usuarios distintos de tu lista escriben la misma frase en 60 segundos,
+y Twitch los identifica como moderadores o broadcaster, el bot la confirma.
+Puedes exigir tres coincidencias en el asistente. Repeticiones de una misma cuenta,
+mensajes viejos, enlaces, menciones y comandos de moderación no cuentan.
+Se comparan frases literales cortas, como `coco`, sin distinguir mayúsculas;
+no se extrae una supuesta palabra clave de un anuncio largo.
+
+Al activarlo, el intervalo pasa a **3 minutos**. En el siguiente turno disponible
+envía la frase confirmada; 3 minutos después puede enviarla por segunda vez.
+El tercer turno es una reacción al stream o un emote del compositor habitual,
+incluso si ya apareció otra frase. La lectura del chat no genera envíos adicionales:
+todos pasan por el mismo contador, la sesión y las restricciones de Twitch.
+
+El límite de dos intentos por frase y canal se guarda en `runs/raffle-CANAL.json`.
+Las reservas se anotan antes del envío: si hay un error o un envío incierto,
+no se repite para compensarlo. Reiniciar no renueva ese límite ni elimina la
+separación de 180 segundos entre frases. Tras una reconexión hacen falta
+confirmaciones nuevas; una confirmación caduca a los 10 minutos. En modo solo
+emotes se mantiene la respuesta normal y no se escribe la frase.
+
+También puedes configurarlo directamente, sustituyendo estos nombres de ejemplo:
+
+```bash
+uv run python -m sniper.daemon --chat CANAL --raffle-users MOD_UNO MOD_DOS --dry-run
+# Mismo comportamiento en real, después de preparar la sesión:
+uv run python -m sniper.daemon --chat CANAL --raffle-users MOD_UNO MOD_DOS
+```
+
+La vista previa lee el chat público y simula los turnos; no abre Brave, no envía
+mensajes ni modifica el registro de intentos reales. Las listas de usuarios quedan
+en `.sniper-local.json`; ese archivo y `runs/` están excluidos de Git.
+
 Para reutilizar la configuración:
 
 ```bash
