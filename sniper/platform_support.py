@@ -28,8 +28,28 @@ def find_streamlink():
     return shutil.which("streamlink.exe" if sys.platform == "win32" else "streamlink")
 
 
-def launch_hint():
-    return "scripts\\launch_brave.bat --kick elded" if sys.platform == "win32" else "scripts/launch_brave.sh --kick elded"
+def launch_hint(*, platform="kick"):
+    if sys.platform == "win32":
+        return "scripts\\launch_brave.bat --twitch CANAL" if platform == "twitch" else "scripts\\launch_brave.bat --kick CANAL"
+    return "scripts/launch_brave.sh" if platform == "twitch" else "scripts/launch_brave.sh --kick CANAL"
+
+
+def configure_console():
+    """Activa UTF-8 y compatibilidad ANSI en la consola de Windows."""
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+    try:
+        from colorama import just_fix_windows_console
+        just_fix_windows_console()
+    except ImportError:
+        # uv sync instala colorama; el registro básico sigue siendo utilizable si falta.
+        pass
 
 
 async def notify(status, message):

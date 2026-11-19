@@ -9,7 +9,7 @@ tras un canje exitoso. El bot de chat no busca ni canjea códigos.
 
 [Asistente automático](#asistente-de-configuración-y-arranque) ·
 [Kick en Linux](#kick--linux) · [Kick en Windows](#kick--windows-powershell) ·
-[Chat de Twitch](#bot-de-chat-de-twitch--linux) ·
+[Chat Linux](#bot-de-chat-de-twitch--linux) · [Chat Windows](#bot-de-chat-de-twitch--windows-powershell) ·
 [Instalación Linux](#instalación-en-linux) · [Instalación Windows](#instalación-en-windows) ·
 [Configuración con IA](#configuración-asistida-con-agentsmd) ·
 [Límites y recuperación](#límites-y-recuperación)
@@ -28,7 +28,8 @@ uv run python -m sniper.setup
 El asistente pide tus usuarios de Twitch y Kick, el ID público o alias de PSN
 (opcionales), el canal del streamer o su URL, y el intervalo de mensajes o la zona
 del código. Al terminar, eliges vista previa, arranque real o solo guardar.
-El arranque de chat empieza con la cuenta regresiva antes del primer mensaje.
+Las reacciones normales empiezan con la cuenta regresiva; una frase de rifa
+confirmada tiene prioridad inmediata.
 En Kick arranca la captura; el canje real requiere una ROI configurada.
 
 En modo Twitch también puedes indicar una lista de usuarios vigilados para rifas
@@ -45,16 +46,20 @@ mensajes viejos, enlaces, menciones y comandos de moderación no cuentan.
 Se comparan frases literales cortas, como `coco`, sin distinguir mayúsculas;
 no se extrae una supuesta palabra clave de un anuncio largo.
 
-Al activarlo, el intervalo pasa a **3 minutos**. En el siguiente turno disponible
-envía la frase confirmada; 3 minutos después puede enviarla por segunda vez.
-El tercer turno es una reacción al stream o un emote del compositor habitual,
-incluso si ya apareció otra frase. La lectura del chat no genera envíos adicionales:
-todos pasan por el mismo contador, la sesión y las restricciones de Twitch.
+Al confirmarse, envía la frase **inmediatamente**, sin esperar al contador normal
+ni a un fotograma de vídeo. El segundo intento se programa **60 segundos después
+del primero**. El modo lento y las restricciones de Twitch siguen aplicándose.
+El contador muestra el plazo de la segunda frase mientras está pendiente.
+
+Después vuelve al intervalo normal de **3 minutos**: el tercer turno es una
+reacción al stream o un emote, incluso si ya apareció otra frase. Las reacciones
+normales siguen necesitando vídeo reciente. El lector despierta el bucle del bot;
+todos los envíos pasan por el mismo remitente y no se ejecutan en paralelo.
 
 El límite de dos intentos por frase y canal se guarda en `runs/raffle-CANAL.json`.
 Las reservas se anotan antes del envío: si hay un error o un envío incierto,
 no se repite para compensarlo. Reiniciar no renueva ese límite ni elimina la
-separación de 180 segundos entre frases. Tras una reconexión hacen falta
+separación de 60 segundos entre intentos de frase. Tras una reconexión hacen falta
 confirmaciones nuevas; una confirmación caduca a los 10 minutos. En modo solo
 emotes se mantiene la respuesta normal y no se escribe la frase.
 
@@ -172,13 +177,47 @@ uv run python -m sniper.daemon --chat "$STREAM_CHANNEL" --source "$STREAM_URL" -
 
 `420` equivale a 7 minutos. `Ctrl+C` detiene cualquiera de los procesos.
 La ejecución real del bot de chat reemplaza borradores existentes en el cuadro de envío.
-No hay bot de chat para Kick; el modo de chat conserva su alcance de Linux.
+El modo de chat y las rifas están disponibles en Linux y Windows. No hay bot de chat para Kick.
 
 Si aparece `ECONNREFUSED 127.0.0.1:9333`, el bot no pudo conectarse al Brave
 dedicado. Ejecuta `scripts/launch_brave.sh` en otra terminal, inicia sesión en
 Twitch en esa ventana y mantenla abierta. Después vuelve a ejecutar el bot.
 Un Brave abierto normalmente no expone ese puerto; el lanzador prepara el perfil
 y CDP. El bot no inicia Brave automáticamente. `--dry-run` no necesita esa conexión.
+
+### Bot de chat de Twitch · Windows (PowerShell)
+
+Usa el mismo asistente para configurar tu cuenta de referencia, el streamer,
+el intervalo y la lista de usuarios vigilados para rifas:
+
+```powershell
+uv sync --locked
+uv run python -m sniper.setup
+# Arrancar en real con lo guardado:
+uv run python -m sniper.setup --run --real
+```
+
+El asistente abre automáticamente el Brave dedicado y reutiliza su sesión de Twitch.
+Si no estás autenticado, muestra un error antes de la captura o del contador.
+Para preparar esa sesión por primera vez o elegir el canal manualmente:
+
+```powershell
+$streamChannel = "tu_canal"
+$streamUrl = "https://www.twitch.tv/$streamChannel"
+.\scripts\launch_brave.ps1 -TwitchStream -Channel $streamChannel
+# Alternativa desde CMD: scripts\launch_brave.bat --twitch tu_canal
+
+# Vista previa, sin conectar a Brave ni enviar:
+uv run python -m sniper.daemon --chat $streamChannel --source $streamUrl --dry-run
+# Chat real con cuenta regresiva antes del primer mensaje, cada 3 minutos:
+uv run python -m sniper.daemon --chat $streamChannel --source $streamUrl --chat-interval 180 --wait-first
+# Rifas: sustituye los nombres de ejemplo por los de tu lista:
+uv run python -m sniper.daemon --chat $streamChannel --raffle-users MOD_UNO MOD_DOS
+```
+
+El contador y los mensajes usan UTF-8 y soporte ANSI con Colorama, instalado por
+`uv sync`. Los perfiles se guardan en LOCALAPPDATA y los límites de las rifas
+persisten en `runs/`, igual que en Linux. `Ctrl+C` detiene el bot y la captura.
 
 ### Cambiar de streamer usando su URL
 
@@ -210,7 +249,7 @@ La cuenta se toma de la sesión que abras a mano en un perfil dedicado de Brave:
 | Correo y contraseña de PSN | Perfil dedicado de Brave | Lanza Brave con `scripts/launch_brave.sh` (Linux) o `scripts\launch_brave.ps1` (Windows) e inicia sesión en store.playstation.com. El perfil queda en `~/.local/share/twitch-psn-sniper/brave-profile` o `%LOCALAPPDATA%\twitch-psn-sniper\brave-profile`. |
 | Región de la tienda | URL de canje | Por defecto `es-co` (Colombia). Si tu cuenta es de otra región, cambia `STORE_URL` en `sniper/browser.py` (p. ej. `es-mx`, `en-us`). |
 | `accountId` / ID en línea | Ninguno | PSN lo obtiene de la sesión; no hace falta escribirlo. |
-| Canal a vigilar | Línea de comandos | `--channel CANAL` en `sniper.kick`; `--chat CANAL` en `sniper.daemon`; `--kick CANAL` en `doctor` y el lanzador de Linux, o `-KickStream -Channel CANAL` en PowerShell. |
+| Canal a vigilar | Línea de comandos | `--channel CANAL` en `sniper.kick`; `--chat CANAL` en `sniper.daemon`; `--kick CANAL` en `doctor` y el lanzador de Linux. En PowerShell: `-KickStream -Channel CANAL` o `-TwitchStream -Channel CANAL`. |
 | Zona del código en pantalla | Línea de comandos | `--roi X0 Y0 X1 Y1` (ver "Preparar el canje"). |
 
 Todo lo que el programa genera (registro de intentos, capturas del modal de PSN,
@@ -237,8 +276,8 @@ Abre el proyecto con tu asistente de código y dale una de estas instrucciones:
 
 La guía distingue las dos funciones: Kick utiliza PSN y OCR; el bot de chat usa
 tu sesión de Twitch y puede reaccionar con emotes sin configurar PSN ni modelos OCR.
-También indica que el soporte de Windows corresponde a Kick, `redeem_cli` y `doctor`;
-el bot de chat conserva su alcance de Linux.
+La configuración del chat de Twitch, las rifas y los códigos de Kick está disponible
+en Linux y Windows con el mismo asistente y las mismas opciones.
 
 ## Instalación en Windows
 
@@ -254,8 +293,7 @@ Abre una terminal nueva para que encuentre `uv`. Desde la carpeta del proyecto:
 ```powershell
 uv python install 3.12
 uv sync --python 3.12
-uv run python -m sniper.doctor --kick CANAL
-uv run python -m sniper.kick --channel CANAL --dry-run
+uv run python -m sniper.setup
 ```
 
 `uv` instala Python, crea `.venv` e instala las versiones de `uv.lock`.
@@ -265,9 +303,13 @@ entorno en PATH durante la ejecución.
 
 Windows selecciona ONNX Runtime para CPU automáticamente desde `pyproject.toml`;
 no requiere una GPU NVIDIA. Linux conserva la dependencia de ONNX Runtime GPU.
+Puedes elegir chat de Twitch o códigos de Kick desde el asistente. La sesión
+del Brave dedicado debe iniciarse una vez en cada máquina; copiar la configuración
+local no transfiere las sesiones de Twitch ni PSN.
 
-Los modelos OCR deben estar disponibles localmente para que `doctor` los pruebe.
-En una instalación nueva, prepararlos una vez fuera del diagnóstico:
+Los modelos OCR son necesarios para detectar códigos de Kick y para la prueba
+OCR de `doctor`; el bot de chat de Twitch no los necesita. Para usar OCR,
+prepararlos una vez fuera del diagnóstico:
 
 ```powershell
 uv run python -m rapidocr.main download_models
@@ -283,8 +325,7 @@ Con `uv` y Brave instalados:
 ```bash
 uv python install 3.12
 uv sync --python 3.12
-uv run python -m sniper.doctor --kick CANAL
-uv run python -m sniper.kick --channel CANAL
+uv run python -m sniper.setup
 ```
 
 La instalación sigue `pyproject.toml` y `uv.lock`. Linux conserva ONNX Runtime GPU;
@@ -380,9 +421,10 @@ La resolución adquiere primero el candado global y después el de la campaña.
 El CLI conserva `--inspect`, `--bench` y `--code`; este último realiza un canje real
 solo al solicitarlo explícitamente.
 
-La compatibilidad de Windows cubre Kick, `redeem_cli` y `doctor`.
-Las pruebas de Windows simulan sus APIs desde Linux; falta probar los lanzadores,
-la captura y la conexión a Brave en una máquina Windows real.
+Windows incluye el chat de Twitch con cuenta regresiva, reacciones y rifas, además
+de Kick, `setup`, `redeem_cli` y `doctor`. Las pruebas locales simulan sus APIs
+desde Linux; las pruebas nativas de los lanzadores requieren ejecutarse en Windows.
+La validación con Brave y un stream reales debe hacerse en la máquina de destino.
 
 ## Bot de chat de Twitch
 
@@ -399,8 +441,9 @@ uv run python -m sniper.daemon --chat CANAL --dry-run
 uv run python -m sniper.daemon --chat CANAL --chat-interval 300
 ```
 
-Esta parte del proyecto conserva su alcance de Linux; no está incluida en la
-validación de compatibilidad con Windows. Los logs se guardan en `runs/` y no se publican.
+El mismo bot funciona en Linux y Windows. Ollama es opcional en ambos sistemas;
+si no hay un modelo de visión local disponible, se usan emotes. Los logs y los
+registros de rifas se guardan en `runs/` y no se publican.
 
 ## Pruebas
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .campaign import HALTS, REJECTIONS, attempts, campaign_directories
 from .filelock import FileLock
-from .platform_support import find_brave, find_streamlink, launch_hint
+from .platform_support import configure_console, find_brave, find_streamlink, launch_hint
 
 RUNS = Path(__file__).resolve().parent.parent / "runs"
 PACKAGES = {"av": "av", "numpy": "numpy", "cv2": "opencv-python-headless",
@@ -122,6 +122,9 @@ def diagnose(kick=None):
     for module, distribution in PACKAGES.items():
         check(f"Paquete {module}", lambda m=module, d=distribution: package_version(m, d),
               "Ejecutar uv sync desde la carpeta del proyecto")
+    if sys.platform == "win32":
+        check("Consola Windows", lambda: package_version("colorama", "colorama"),
+              "Ejecutar uv sync para instalar el soporte de la cuenta regresiva")
     executable = find_streamlink()
 
     def streamlink_version():
@@ -151,7 +154,7 @@ def diagnose(kick=None):
         return executable
 
     check("Brave", brave, "Instalar Brave o añadir su ejecutable a PATH")
-    check("CDP local", cdp_version, "Ejecutar manualmente " + launch_hint())
+    check("CDP local", cdp_version, "Ejecutar manualmente " + launch_hint(platform="kick" if kick else "twitch"))
     check("Carpeta runs", lambda: writable_directory(RUNS), "Corregir los permisos de runs/ o de su carpeta padre")
     directories = campaign_directories(RUNS)
     selected = RUNS / ("kick-" + kick) if kick else RUNS
@@ -182,12 +185,11 @@ def diagnose(kick=None):
 
 
 def main(argv=None):
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kick", metavar="CANAL")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args(argv)
-    if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
     if args.kick and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}", args.kick):
         parser.error("Nombre de canal inválido")
     report, code = diagnose(args.kick.lower() if args.kick else None)

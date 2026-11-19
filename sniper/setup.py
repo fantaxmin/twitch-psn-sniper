@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .doctor import cdp_version
-from .platform_support import find_brave
+from .platform_support import configure_console, find_brave
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".sniper-local.json"
@@ -58,7 +58,7 @@ def validate(config):
         if config["twitch_user"] in users:
             raise ValueError("Tu propia cuenta no debe estar en la lista vigilada")
         if config["interval"] != 180:
-            raise ValueError("El modo de rifas utiliza intervalos de 180 segundos")
+            raise ValueError("Las reacciones normales del modo de rifas utilizan intervalos de 180 segundos")
     for key, platform in (("twitch_user", "twitch"), ("kick_user", "kick")):
         value = config[key]
         if not isinstance(value, str):
@@ -123,7 +123,12 @@ def ensure_browser(url, *, timeout=15):
         return
     except (OSError, ValueError):
         pass
-    subprocess.Popen(browser_command(url), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    options = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        # Mantener Brave independiente de Ctrl+C en la consola del bot.
+        options["creationflags"] = (getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                                    | getattr(subprocess, "DETACHED_PROCESS", 0x00000008))
+    subprocess.Popen(browser_command(url), **options)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -137,8 +142,6 @@ def ensure_browser(url, *, timeout=15):
 def build_command(config, *, real=False):
     config = validate(config)
     if config["mode"] == "twitch-chat":
-        if sys.platform == "win32":
-            raise ValueError("El bot de chat está disponible para Linux; Windows cubre los códigos de Kick")
         channel, url = target(config["channel"], "twitch")
         cmd = [sys.executable, "-m", "sniper.daemon", "--chat", channel, "--source", url,
                "--chat-interval", str(config["interval"]), "--wait-first"]
@@ -190,14 +193,12 @@ def ask(prompt, default="", *, check=lambda v: v):
 def wizard(previous=None):
     previous = previous or {}
     print("Configuración local. No escribas contraseñas, correos, cookies ni tokens.")
-    print("1. Chat de Twitch (Linux)   2. Códigos PSN del vídeo de Kick")
+    print("1. Chat de Twitch   2. Códigos PSN del vídeo de Kick")
     def choice(value):
         if value not in {"1", "2"}:
             raise ValueError("Elige 1 o 2")
-        if value == "1" and sys.platform == "win32":
-            raise ValueError("El bot de chat conserva su alcance de Linux")
         return value
-    selected = ask("Modo", "2" if previous.get("mode") == "kick-codes" or sys.platform == "win32" else "1", check=choice)
+    selected = ask("Modo", "2" if previous.get("mode") == "kick-codes" else "1", check=choice)
     config = {"version": 2, "mode": "twitch-chat" if selected == "1" else "kick-codes",
               "raffle_users": [], "raffle_min_users": 2}
     for key, platform, label in (("twitch_user", "twitch", "Tu usuario de Twitch"),
@@ -238,7 +239,7 @@ def wizard(previous=None):
                 return number
             config["raffle_min_users"] = ask("Usuarios distintos que deben coincidir", str(previous.get("raffle_min_users", 2)), check=minimum)
             config["interval"] = 180
-            print("Rifas activadas: dos turnos de frase separados por 3 minutos; el tercero será una reacción normal.")
+            print("Rifas activadas: primera frase inmediata, segunda tras 1 minuto; después una reacción normal.")
     config["roi"] = None
     if selected == "2":
         def roi(value):
@@ -263,6 +264,7 @@ def wizard(previous=None):
 
 
 def main(argv=None):
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="Arranca con la configuración guardada; simulación por defecto")
     parser.add_argument("--real", action="store_true", help="Con --run: envío/canje real; reutiliza sesiones de Brave")

@@ -39,6 +39,7 @@ class BraveChatSender:
         self.send_button: Any = None
         self.emote_only = False
         self.next_allowed = 0.0
+        self.slow_until = 0.0
         self.restricted = False
         self.stop = stop
         self.start_timeout = start_timeout
@@ -105,7 +106,8 @@ class BraveChatSender:
         self.emote_only = bool(re.search(r"(?:solo|únicamente) (?:emotes|emoticonos)|emote.only", lower))
         slow = re.search(r"(?:espera|wait).*?(\d+)\s*(?:s\b|segundos?|seconds?)", lower)
         if slow:
-            self.next_allowed = max(self.next_allowed, time.perf_counter() + int(slow.group(1)) + 1)
+            self.slow_until = max(self.slow_until, time.perf_counter() + int(slow.group(1)) + 1)
+            self.next_allowed = max(self.next_allowed, self.slow_until)
 
     async def _notice(self) -> str:
         parts = []
@@ -117,10 +119,18 @@ class BraveChatSender:
         return " ".join(parts)
 
     async def send(self, message: str) -> None:
+        await self._send(message)
+
+    async def send_raffle(self, message: str) -> None:
+        # La frase confirmada no espera el intervalo local de las reacciones.
+        # El modo lento y las restricciones explícitas de Twitch siguen aplicándose.
+        await self._send(message, raffle=True)
+
+    async def _send(self, message: str, *, raffle: bool = False) -> None:
         if self.stop is not None and self.stop.is_set():
             raise ChatUnavailable("Daemon detenido; mensaje cancelado")
         await self.refresh()
-        if time.perf_counter() < self.next_allowed:
+        if time.perf_counter() < (self.slow_until if raffle else self.next_allowed):
             raise ChatUnavailable("Twitch pide esperar; se omite este turno")
         if not clean_reaction(message):
             raise ValueError("Mensaje de chat inválido")

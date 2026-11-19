@@ -105,9 +105,11 @@ def test_refused_cdp_connection_has_actionable_message_and_cleans_driver(monkeyp
     monkeypatch.setattr(playwright.async_api, "async_playwright", Manager)
     monkeypatch.setattr("sniper.session.install_click_guard", lambda: None)
     async def scenario():
+        expected_hint = "scripts\\launch_brave.bat --twitch CANAL" if sys.platform == "win32" else "scripts/launch_brave.sh"
         session = ChatBrowserSession()
-        with pytest.raises(ChatBrowserUnavailable, match="scripts/launch_brave.sh") as error:
+        with pytest.raises(ChatBrowserUnavailable) as error:
             await session.connect()
+        assert expected_hint in str(error.value)
         assert "9333" in str(error.value) and "Twitch" in str(error.value)
         assert session.playwright is session.browser is session.context is None
         assert stopped == [True]
@@ -115,12 +117,13 @@ def test_refused_cdp_connection_has_actionable_message_and_cleans_driver(monkeyp
 
 
 def test_daemon_reports_missing_brave_with_exit_one_without_traceback(monkeypatch, capsys, main_logging):
+    expected_hint = "scripts\\launch_brave.bat --twitch CANAL" if sys.platform == "win32" else "scripts/launch_brave.sh"
     async def unavailable(self):
-        raise ChatBrowserUnavailable("Abre scripts/launch_brave.sh; conexión 9333 no disponible")
+        raise ChatBrowserUnavailable(f"Abre {expected_hint}; conexión 9333 no disponible")
     monkeypatch.setattr(daemon.ChatDaemon, "main", unavailable)
     assert daemon.main(["--chat", "rubius"]) == 1
     output = capsys.readouterr().err
-    assert "scripts/launch_brave.sh" in output and "Traceback" not in output
+    assert expected_hint in output and "Traceback" not in output
 
 
 def test_unauthenticated_twitch_aborts_before_capture_and_has_clear_error(monkeypatch, capsys, main_logging):
@@ -194,7 +197,7 @@ def test_normal_run_sends_only_chat_and_closes_its_resources(monkeypatch):
         assert state["messages"] == ["PogChamp"]
         assert state["session_connected"] and state["session_closed"]
         assert state["sender_closed"] and state["capture_closed"] and app.events.closed
-        entries = [json.loads(line) for line in (app.run_dir / "events.jsonl").read_text().splitlines()]
+        entries = [json.loads(line) for line in (app.run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(entries) == 1 and entries[0]["kind"] == "chat_message"
         assert entries[0]["message"] == "PogChamp" and not entries[0]["dry_run"]
         assert not (app.run_dir / "whispers.jsonl").exists()
@@ -213,7 +216,7 @@ def test_dry_run_never_opens_browser_or_sends(monkeypatch):
         await asyncio.wait_for(app.main(), 2)
         assert state["messages"] == [] and not state["session_connected"]
         assert state["capture_closed"] and app.events.closed
-        entries = [json.loads(line) for line in (app.run_dir / "events.jsonl").read_text().splitlines()]
+        entries = [json.loads(line) for line in (app.run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert entries[0]["dry_run"] and entries[0]["message"] == "PogChamp"
     asyncio.run(scenario())
 

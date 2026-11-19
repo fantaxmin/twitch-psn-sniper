@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .browser import CDP_URL, install_click_guard
+from .platform_support import launch_hint
 
 
 class ChatBrowserUnavailable(RuntimeError):
@@ -26,11 +27,11 @@ class ChatBrowserSession:
             except PlaywrightError as exc:
                 raise ChatBrowserUnavailable(
                     f"No se pudo conectar al Brave dedicado en {CDP_URL}. "
-                    "Ejecuta scripts/launch_brave.sh en otra terminal, inicia sesión en Twitch "
+                    f"Ejecuta {launch_hint(platform='twitch')} en otra terminal, inicia sesión en Twitch "
                     "y deja esa ventana abierta antes de volver a ejecutar el bot. "
                     "Abrir Brave de forma normal no activa el puerto 9333.") from exc
             if not self.browser.contexts:
-                raise ChatBrowserUnavailable("Brave no tiene un contexto disponible; abre el perfil dedicado con scripts/launch_brave.sh e inicia sesión en Twitch")
+                raise ChatBrowserUnavailable(f"Brave no tiene un contexto disponible; abre el perfil dedicado con {launch_hint(platform='twitch')} e inicia sesión en Twitch")
             self.context = self.browser.contexts[0]
         except BaseException:
             await self.close()

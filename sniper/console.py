@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 import shutil
+from .platform_support import configure_console
 
 
 class CountdownConsole(logging.StreamHandler):
     def __init__(self, stream=None):
+        configure_console()
         super().__init__(stream)
         self.interactive = bool(getattr(self.stream, "isatty", lambda: False)())
         self._status = ""

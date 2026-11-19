@@ -1,5 +1,6 @@
-# CPU: instalacion portable de Kick, redeem_cli y doctor para Python 3.12+.
+# CPU: Kick, chat de Twitch, setup, redeem_cli y doctor para Python 3.12+.
 av>=19.0.2
+colorama>=0.4.6; sys_platform == 'win32'
 numpy>=2.5.5
 opencv-python-headless>=5.1.0.95
 onnxruntime

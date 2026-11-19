@@ -26,6 +26,7 @@ from .chat_sender import BraveChatSender, ChatUnavailable
 from .participation import ChatParticipation
 from .reactions import ReactionComposer
 from .session import ChatBrowserSession, ChatBrowserUnavailable
+from .platform_support import configure_console
 
 log = logging.getLogger("sniper")
 RUNS = Path(__file__).resolve().parent.parent / "runs"
@@ -72,7 +73,7 @@ class ChatDaemon:
                     event=self.event)
                 listener = asyncio.create_task(watch_messages(
                     self.args.chat, composer.observe, stop=self.stop, on_reset=composer.reset))
-                log.info("Rifas: 2 turnos de frase, separados por 180 s; tercero normal. Confirmación: %d usuarios distintos",
+                log.info("Rifas: primer mensaje inmediato; segundo en 60 s; después reacción normal. Confirmación: %d usuarios distintos",
                          self.args.raffle_min_users)
             participation = ChatParticipation(
                 frames=self.frames, capture=capture, stop=self.stop, sender=sender,
@@ -117,9 +118,9 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Envía mensajes periódicos al chat de Twitch con cuenta regresiva")
     parser.add_argument("--chat", default="rubius", help="Canal de Twitch (por defecto rubius)")
     parser.add_argument("--chat-interval", type=float, default=300, help="Segundos entre mensajes (300=5 min, 420=7 min)")
-    parser.add_argument("--wait-first", action="store_true", help="Inicia con la cuenta regresiva antes del primer mensaje")
+    parser.add_argument("--wait-first", action="store_true", help="Espera el intervalo antes de la primera reacción normal; las rifas confirmadas tienen prioridad")
     parser.add_argument("--raffle-users", nargs="+", default=[], metavar="USUARIO",
-                        help="Lista de moderadores vigilados; activa dos frases y un turno normal, cada 180 s")
+                        help="Moderadores vigilados: frase inmediata y repetición tras 60 s; reacciones normales cada 180 s")
     parser.add_argument("--raffle-min-users", type=int, choices=(2, 3), default=2,
                         help="Usuarios distintos de la lista que deben repetir la frase en 60 s (2 por defecto)")
     parser.add_argument("--source", help="Stream para contexto visual; por defecto el canal elegido")
@@ -154,6 +155,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
+    configure_console()
     args = parse_args(argv)
     from .console import CountdownConsole
     console = CountdownConsole()

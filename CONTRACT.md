@@ -55,7 +55,9 @@ adquieren ambos cuando `--runs-dir` apunta a una carpeta `kick-*`. El CLI en `ru
 adquiere solo el global. No se deben borrar los archivos de candado para desbloquearlos.
 Kick y el CLI devuelven código 3 con mensaje claro si el candado está ocupado.
 
-Windows se limita a Kick, redeem_cli y doctor. Los lanzadores son
+Windows incluye Kick, el bot de chat de Twitch con contador y rifas, setup,
+redeem_cli y doctor. Se comparte la implementación con Linux, sin un fork del bot.
+Los lanzadores son
 `scripts/launch_brave.ps1` y `.bat`, con perfil en LOCALAPPDATA. La captura localiza
 Streamlink en PATH; terminate/kill detienen su subproceso. Las notificaciones son
 opcionales: notify-send en Linux y log/sonido con winsound en Windows.
@@ -64,6 +66,12 @@ crear registros, descargar modelos ni hacer canjes. Ver README.md para instalaci
 con `uv sync` y detalles de sus comprobaciones de solo lectura. `pyproject.toml`
 selecciona ONNX Runtime CPU en Windows y GPU en Linux mediante marcadores de
 plataforma; `uv.lock` fija ambas variantes. Ejecutar los comandos con `uv run`.
+Windows instala Colorama para la salida ANSI del contador y usa UTF-8 para texto
+en PowerShell/CMD. `launch_brave.ps1 -TwitchStream -Channel CANAL` y
+`launch_brave.bat --twitch CANAL` preparan el canal de Twitch en el perfil dedicado.
+`sniper.setup` permite elegir chat y rifas también en Windows; la política de
+asyncio predeterminada de Windows permite los subprocesos de Playwright y las
+conexiones TLS del lector de rifas. No forzar WindowsSelectorEventLoopPolicy.
 
 Por petición del usuario, `python -m sniper.daemon` ahora solo envía mensajes
 periódicos a Twitch. Conserva el contador, los registros y la captura como contexto
@@ -72,10 +80,16 @@ visual para las reacciones. Solo necesita la sesión de Twitch en Brave.
 Las rifas son opcionales: `--raffle-users` habilita un lector IRC independiente
 solo de lectura y un compositor que exige 2 o 3 usuarios distintos de la lista,
 con rol moderador/broadcaster, repitiendo una frase literal corta dentro de 60 s.
-No lee códigos PSN ni susurros. Se activa en `sniper.setup` y obliga al intervalo
-de 180 s: dos turnos de frase y luego uno normal; el lector no llama al remitente.
+No lee códigos PSN ni susurros. Se activa en `sniper.setup`: primer intento inmediato
+al confirmar, segundo tras 60 s y luego turno normal a los 180 s. El lector solo
+señala un evento; ChatParticipation es el único que llama al remitente. El contador
+elige el plazo más próximo entre la rifa y la siguiente reacción normal.
+Las frases se apoyan en el chat confirmado y no esperan la captura de vídeo.
 `runs/raffle-CANAL.json` guarda reservas previas al envío, máximo 2 por frase,
-con separación mínima de 180 s y turno normal pendiente entre reinicios.
+con separación mínima de 60 s y turno normal pendiente entre reinicios. Tras un
+intento, el plazo de la segunda frase se cuenta desde el final del envío. El envío
+prioritario no espera el intervalo local de reacciones de 30 s, pero conserva
+el modo lento y los bloqueos de Twitch. No se repite para compensar errores.
 La simulación usa un registro en memoria. El lector valida canal, login IRC,
 rol, ID y fecha del mensaje; al reconectar borra confirmaciones en memoria.
 La configuración local pasa a v2 con lista vacía al leer un archivo v1.

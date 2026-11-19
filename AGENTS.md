@@ -45,9 +45,12 @@ autenticación, debe terminar con error antes de la captura o los envíos.
 No ejecutar el modo real para probar la configuración sin petición del usuario.
 El modo Twitch permite una lista opcional de usuarios vigilados para rifas.
 Exige coincidencia literal de 2 (o 3) usuarios distintos de esa lista, con rol
-moderador/broadcaster, en 60 segundos. La secuencia es hasta dos intentos de frase
-a intervalos de 180 segundos y un turno normal posterior. Se usa el contador
-existente, sin envíos paralelos. El registro privado `runs/raffle-CANAL.json`
+moderador/broadcaster, en 60 segundos. El primer intento de frase es inmediato
+y el segundo se programa 60 segundos después del primero, respetando el modo lento
+de Twitch. Después viene un turno normal con intervalo de 180 segundos. El lector
+despierta el bucle con un evento; no hay envíos paralelos. La frase no depende
+del vídeo; las reacciones normales siguen exigiendo fotogramas recientes.
+El registro privado `runs/raffle-CANAL.json`
 conserva límites entre reinicios. La lista vacía lo desactiva; nunca añadir nombres
 reales al código ni a las pruebas. La configuración v1 se migra en memoria a v2
 con rifas desactivadas; guardar desde setup conserva las cuentas y preferencias.
@@ -68,8 +71,10 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
 - **Chat de Twitch:** entrada `python -m sniper.daemon`; envía mensajes periódicos
   con cuenta regresiva. No detecta ni canjea códigos y no lee susurros. Seguir la
   sección del bot de chat; no exigir una sesión PSN ni descargar modelos OCR para él.
-- La compatibilidad de Windows cubre Kick, `redeem_cli` y `doctor`. El bot de chat
-  conserva su alcance de Linux; no presentarlo como validado en Windows.
+- Windows y Linux comparten Kick, el bot de chat de Twitch con rifas, `setup`,
+  `redeem_cli` y `doctor`. Windows usa Brave en LOCALAPPDATA, ONNX Runtime CPU y
+  Colorama para la cuenta regresiva. Distinguir las pruebas simuladas de Windows
+  de las ejecutadas realmente en ese sistema; no afirmar validación nativa sin ella.
 
 ## Pasos de configuración de Kick
 
@@ -100,7 +105,7 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
 
 ## Pasos de configuración del bot de chat de Twitch
 
-1. **Entorno:** en Linux, comprobar Python >= 3.12 e instalar las dependencias
+1. **Entorno:** en Linux o Windows, comprobar Python >= 3.12 e instalar las dependencias
    con `uv sync` según `README.md`.
 2. **Canal e intervalo:** usar el canal pedido (`--chat`, por defecto `rubius`).
    `--chat` es el canal del streamer, no el usuario que inicia sesión; debe
@@ -117,7 +122,10 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
    `uv run python -m pytest tests/test_chat_daemon.py tests/test_console_status.py tests/test_participation.py -q`.
    Cubren el daemon, la cuenta regresiva, las reacciones y el envío simulado.
 6. **Sesión de Twitch:** pedir a la persona que abra manualmente
-   `scripts/launch_brave.sh` e inicie sesión en Twitch en el perfil dedicado.
+   `scripts/launch_brave.sh` (Linux) o
+   `.\scripts\launch_brave.ps1 -TwitchStream -Channel CANAL` (Windows) e inicie
+   sesión en Twitch en el perfil dedicado. El asistente abre ese perfil
+   automáticamente cuando falta CDP, pero requiere una sesión autenticada previa.
    Si eligió otro canal, debe abrirlo en ese mismo perfil. No solicitar ni copiar
    credenciales, cookies o tokens. No hace falta iniciar sesión en PSN.
 7. **Entrega:** preparar el comando

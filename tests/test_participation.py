@@ -351,3 +351,25 @@ def test_refresh_distinguishes_login_from_uneditable_input(monkeypatch, login, e
     monkeypatch.setattr(chat_sender, "visible_first", visible)
     with pytest.raises(expected):
         asyncio.run(sender.refresh())
+
+
+def test_urgent_raffle_bypasses_only_local_cooldown_and_respects_twitch_slow_mode(monkeypatch):
+    from sniper import chat_sender
+    now = [1000.0]
+    monkeypatch.setattr(chat_sender.time, "perf_counter", lambda: now[0])
+    async def no_sleep(delay):
+        pass
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", no_sleep)
+    async def scenario():
+        sender = fake_sender()
+        sender.next_allowed = 1030
+        with pytest.raises(ChatUnavailable):
+            await sender.send("coco")
+        assert sender.send_button.clicks == 0
+        await sender.send_raffle("coco")
+        assert sender.send_button.clicks == 1
+        sender.slow_until = 1060
+        with pytest.raises(ChatUnavailable):
+            await sender.send_raffle("coco")
+        assert sender.send_button.clicks == 1
+    asyncio.run(scenario())

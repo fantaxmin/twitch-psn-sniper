@@ -47,8 +47,7 @@ def test_private_config_roundtrip_and_sensitive_fields_rejected(tmp_path):
     assert setup.load_config(path) == config()
 
 
-def test_chat_command_uses_streamer_not_own_username(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "linux")
+def test_chat_command_uses_streamer_not_own_username():
     cmd = setup.build_command(config(), real=True)
     assert cmd[cmd.index("--chat") + 1] == "streamer"
     assert cmd[cmd.index("--source") + 1] == "https://www.twitch.tv/streamer"
@@ -103,7 +102,6 @@ def test_browser_timeout_prevents_bot_start(monkeypatch):
 
 def test_start_propagates_authentication_failure_without_retry(monkeypatch):
     calls = []
-    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(setup, "ensure_browser", lambda url: calls.append("browser"))
     monkeypatch.setattr(setup.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or SimpleNamespace(returncode=1))
     assert setup.start(config(), real=True) == 1
@@ -147,12 +145,13 @@ def test_windows_launch_uses_dedicated_profile_and_kick(monkeypatch, tmp_path):
     assert "--remote-debugging-port=9333" in cmd
     assert any(arg.startswith("--user-data-dir=") and "User With Spaces" in arg for arg in cmd)
     assert "--redeem" in setup.build_command(config("kick-codes"), real=True)
-    with pytest.raises(ValueError, match="Linux"):
-        setup.build_command(config(), real=True)
+    twitch_cmd = setup.build_command(config(), real=True)
+    assert twitch_cmd[twitch_cmd.index("--chat") + 1] == "streamer"
+    assert twitch_cmd[twitch_cmd.index("--source") + 1] == "https://www.twitch.tv/streamer"
+    assert "--wait-first" in twitch_cmd and "--dry-run" not in twitch_cmd
 
 
 def test_wizard_records_accounts_separately_from_target(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "linux")
     answers = iter(["1", "my_twitch", "my_kick", "PSNAlias", "https://www.twitch.tv/STREAMER", "180", "", "3"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     saved, action = setup.wizard()
@@ -191,7 +190,6 @@ def test_legacy_config_migrates_without_losing_accounts_or_rewriting_file(tmp_pa
 
 
 def test_wizard_configures_watched_users_and_three_minute_schedule(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "linux")
     answers = iter(["1", "my_twitch", "", "", "streamer", "300", "mod_two, @MOD_ONE", "2", "3"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     saved, action = setup.wizard()

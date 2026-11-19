@@ -1,10 +1,16 @@
 param(
     [Alias('kick')][switch]$KickStream,
-    [Parameter(Position=0)][string]$Channel = 'elded'
+    [Alias('twitch')][switch]$TwitchStream,
+    [Parameter(Position=0)][string]$Channel = ''
 )
 $ErrorActionPreference = 'Stop'
-if ($Channel -cnotmatch '^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$') {
-    throw 'Canal de Kick invalido'
+if ($KickStream -and $TwitchStream) { throw 'Elige Kick o Twitch, no ambos' }
+if (-not $Channel) {
+    $Channel = if ($KickStream) { 'elded' } else { 'rubius' }
+}
+$channelPattern = if ($KickStream) { '^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$' } else { '^[a-zA-Z0-9_]{1,25}$' }
+if ($Channel -cnotmatch $channelPattern) {
+    throw 'Canal invalido para la plataforma elegida'
 }
 if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA no esta definido' }
 $brave = Get-Command brave.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
@@ -19,7 +25,7 @@ if (-not $brave) {
 if (-not $brave) { throw 'Instala Brave o agrega brave.exe a PATH' }
 $profileDir = Join-Path $env:LOCALAPPDATA 'twitch-psn-sniper\brave-profile'
 New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
-$streamUrl = 'https://www.twitch.tv/rubius'
+$streamUrl = "https://www.twitch.tv/$Channel"
 if ($KickStream) { $streamUrl = "https://kick.com/$Channel" }
 # Las comillas internas conservan rutas con espacios al construir la linea de Windows.
 $braveArgs = @(

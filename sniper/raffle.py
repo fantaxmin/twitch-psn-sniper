@@ -1,6 +1,7 @@
 """Frases confirmadas por usuarios vigilados; dos turnos y luego una reacción normal."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -100,19 +101,38 @@ class RaffleLedger:
         self.blocked_normal_key = None
         self.memory = {"version": 1, "attempts": {}, "normal_due": False, "last_phrase_at": 0.0}
 
-    def _turn(self, data, candidate):
-        if (data.get("version") != 1 or not isinstance(data.get("attempts"), dict)
+    @staticmethod
+    def _validate(data):
+        if (not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("attempts"), dict)
                 or not isinstance(data.get("normal_due"), bool)
                 or not isinstance(data.get("last_phrase_at"), (int, float))
                 or not math.isfinite(data["last_phrase_at"])
                 or any(type(count) is not int or not 0 <= count <= 2 for count in data["attempts"].values())):
             raise RuntimeError("Registro de rifas inválido; no se repetirán frases")
-        if data["normal_due"]:
+        return data
+
+    def state(self):
+        if self.path is None:
+            return self._validate(self.memory)
+        if not self.path.exists():
+            return self._validate({"version": 1, "attempts": {}, "normal_due": False, "last_phrase_at": 0.0})
+        with FileLock(self.path.with_suffix(".lock")):
+            return self._validate(json.loads(self.path.read_text(encoding="utf-8")))
+
+    def _turn(self, data, candidate, *, acknowledge=False):
+        self._validate(data)
+        if acknowledge:
+            key = hashlib.sha256(candidate.casefold().encode()).hexdigest()
+            if data.get("last_phrase_key") == key:
+                data["last_phrase_at"] = max(data["last_phrase_at"], time.time())
+                return False, True
+            return False, False
+        if candidate is None and data["normal_due"]:
             data["normal_due"] = False
             return False, True
-        if candidate is None:
+        if candidate is None or data["normal_due"]:
             return False, False
-        if time.time() - data["last_phrase_at"] < 180:
+        if time.time() - data["last_phrase_at"] < 60:
             return False, False
         key = hashlib.sha256(candidate.casefold().encode()).hexdigest()
         count = data["attempts"].get(key, 0)
@@ -124,16 +144,16 @@ class RaffleLedger:
         data["normal_due"] = count + 1 == 2
         return True, True
 
-    def reserve(self, candidate):
+    def reserve(self, candidate, *, acknowledge=False):
         if self.path is None:
-            result = self._turn(self.memory, candidate)[0]
+            result = self._turn(self.memory, candidate, acknowledge=acknowledge)[0]
             self.blocked_normal_key = self.memory.get("last_phrase_key")
             return result
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(self.path.with_suffix(".lock")):
             data = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {
                 "version": 1, "attempts": {}, "normal_due": False, "last_phrase_at": 0.0}
-            use_phrase, changed = self._turn(data, candidate)
+            use_phrase, changed = self._turn(data, candidate, acknowledge=acknowledge)
             self.blocked_normal_key = data.get("last_phrase_key")
             if changed:
                 fd, temporary = tempfile.mkstemp(prefix=".raffle-", dir=self.path.parent)
@@ -157,10 +177,15 @@ class RaffleComposer:
         self.active = None
         self.confirmed_at = 0
         self.last_raffle = False
+        self.wakeup = asyncio.Event()
+        self.attempted_phrase = None
+        self.failed = False
+        self.normal_in_progress = False
 
     def reset(self):
         self.detector.reset()
         self.active = None
+        self.wakeup.set()
 
     def observe(self, message):
         candidate = self.detector.observe(message)
@@ -171,17 +196,69 @@ class RaffleComposer:
                 self.event(kind="raffle_confirmed", phrase=candidate)
             if candidate.casefold() == self.active.casefold():
                 self.confirmed_at = time.monotonic()
+                self.wakeup.set()
+
+    def priority_due(self):
+        if self.failed or self.normal_in_progress or self.active is None or time.monotonic() - self.confirmed_at > 600:
+            return None
+        try:
+            state = self.ledger.state()
+            key = hashlib.sha256(self.active.casefold().encode()).hexdigest()
+            if state["normal_due"] or state["attempts"].get(key, 0) >= 2:
+                return None
+            remaining = state["last_phrase_at"] + 60 - time.time()
+            return 0.0 if remaining <= 0 else time.perf_counter() + remaining
+        except BlockingIOError:
+            return None  # Otro proceso está guardando; probar en el siguiente ciclo.
+        except (OSError, ValueError, RuntimeError):
+            self.failed = True
+            self.event(kind="raffle_disabled", reason="ledger_unavailable")
+            return None
+
+    async def compose_priority(self, *, emote_only=False):
+        due = self.priority_due()
+        if emote_only:
+            self.active = None
+            return None
+        if due is None or time.perf_counter() < due:
+            return None
+        candidate = self.active
+        try:
+            if not self.ledger.reserve(candidate):
+                return None
+        except BlockingIOError:
+            return None
+        except (OSError, ValueError, RuntimeError):
+            self.failed = True
+            self.event(kind="raffle_disabled", reason="ledger_unavailable")
+            return None
+        self.last_raffle = True
+        self.attempted_phrase = candidate
+        self.event(kind="raffle_reserved")
+        return candidate, "raffle"
+
+    def after_priority_attempt(self):
+        candidate, self.attempted_phrase = self.attempted_phrase, None
+        if candidate is None:
+            return
+        try:
+            self.ledger.reserve(candidate, acknowledge=True)
+        except (OSError, ValueError, RuntimeError):
+            self.failed = True
+            self.event(kind="raffle_disabled", reason="ledger_unavailable")
+        self.wakeup.set()
 
     async def compose(self, frame, *, emote_only=False):
-        candidate = self.active if time.monotonic() - self.confirmed_at <= 600 else None
         self.last_raffle = False
-        use_phrase = self.ledger.reserve(None if emote_only else candidate)
-        if not emote_only and use_phrase:
-            self.last_raffle = True
-            self.event(kind="raffle_reserved")
-            return candidate, "raffle"
-        # Aunque aparezca otra frase, el turno posterior al segundo es siempre normal.
-        if candidate is not None:
+        # Este camino es solo para reacciones normales. Las frases usan su propio plazo.
+        if not self.failed:
+            state = self.ledger.state()
+            normal_due = state["normal_due"]
+            self.ledger.blocked_normal_key = state.get("last_phrase_key")
+        else:
+            normal_due = True
+        self.normal_in_progress = normal_due
+        if normal_due:
             self.active = None
         message, source = await self.fallback.compose(frame, emote_only=emote_only)
         # Si la palabra clave era un emote, el turno normal debe usar otro distinto.
@@ -190,6 +267,17 @@ class RaffleComposer:
                            if hashlib.sha256(emote.casefold().encode()).hexdigest() != self.ledger.blocked_normal_key)
             source = "emote"
         return message, source
+
+    def after_normal_attempt(self, *, attempted):
+        try:
+            if self.normal_in_progress and attempted and not self.failed:
+                self.ledger.reserve(None)
+        except (OSError, ValueError, RuntimeError):
+            self.failed = True
+            self.event(kind="raffle_disabled", reason="ledger_unavailable")
+        finally:
+            self.normal_in_progress = False
+            self.wakeup.set()
 
     def remember(self, message):
         if not self.last_raffle:

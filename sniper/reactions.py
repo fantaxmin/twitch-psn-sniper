@@ -51,7 +51,9 @@ class ReactionComposer:
             self.url + endpoint,
             data=json.dumps(payload).encode() if payload is not None else None,
             headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=10) as response:
+        # Ollama se consulta directamente: no enviar imágenes por un proxy del sistema.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=10) as response:
             return json.loads(response.read(1_000_000))
 
     def _generate(self, frame: Any) -> dict:
