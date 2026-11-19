@@ -17,13 +17,13 @@ if (-not $brave) {
     }
 }
 if (-not $brave) { throw 'Instala Brave o agrega brave.exe a PATH' }
-$profile = Join-Path $env:LOCALAPPDATA 'twitch-psn-sniper\brave-profile'
-New-Item -ItemType Directory -Force -Path $profile | Out-Null
+$profileDir = Join-Path $env:LOCALAPPDATA 'twitch-psn-sniper\brave-profile'
+New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
 $streamUrl = 'https://www.twitch.tv/rubius'
 if ($KickStream) { $streamUrl = "https://kick.com/$Channel" }
 # Las comillas internas conservan rutas con espacios al construir la linea de Windows.
 $braveArgs = @(
-    "--user-data-dir=`"$profile`"",
+    "--user-data-dir=`"$profileDir`"",
     '--remote-debugging-address=127.0.0.1',
     '--remote-debugging-port=9333',
     '--no-first-run',

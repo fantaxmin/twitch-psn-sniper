@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sniper.browser import BraveBrowser, RedeemTab, STORE_URL
+from sniper.browser import BraveBrowser, RedeemTab, STORE_URL, VISIBLE_TEXT_JS
 
 
 class Element:
@@ -26,6 +26,11 @@ class Element:
 
     async def inner_text(self, **kwargs):
         return self.text
+
+    async def evaluate(self, script, *args, **kwargs):
+        # The browser reads only visible text, never raw inner_text with <script> content.
+        assert script == VISIBLE_TEXT_JS
+        return await self.inner_text()
 
 
 class Field(Element):

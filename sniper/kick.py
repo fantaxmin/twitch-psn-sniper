@@ -205,7 +205,7 @@ def parse_args(argv=None):
     parser.add_argument("--max-frame-age", type=float, default=3.0)
     parser.add_argument("--max-rejections", type=int, default=3, help="Tope persistido de rechazos PSN por campaña (3)")
     parser.add_argument("--new-campaign", action="store_true", help="Crear otro registro de campaña y permitir participar pese a éxitos previos")
-    parser.add_argument("--require-label", action="store_true", help="Exigir CODIGO/CÓDIGO junto al código en la misma línea OCR")
+    parser.add_argument("--require-label", action="store_true", help="Exigir CODIGO/CÓDIGO en la misma caja OCR del código o en una adyacente (izquierda o encima)")
     parser.add_argument("--roi", nargs=4, type=float, default=(0., 0., 1., 1.), metavar=("X0", "Y0", "X1", "Y1"),
                         help="En real, ajustar al widget para excluir chat y alertas (coordenadas relativas 0–1)")
     parser.add_argument("--once", action="store_true")

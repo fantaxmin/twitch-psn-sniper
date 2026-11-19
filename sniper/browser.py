@@ -37,6 +37,34 @@ REQUEST_SUBMIT_JS = """button => {
 }"""
 
 
+# Texto que el usuario ve. inner_text() del iframe del voucher incluye el contenido de
+# <script> (JSON de sesión con correo/accountId y cadenas de i18n), lo que producía
+# falsos session_lost y filtraba datos personales a registros y eventos.
+VISIBLE_TEXT_JS = """el => {
+    const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'IFRAME']);
+    const out = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {acceptNode(node) {
+        for (let p = node.parentElement; p; p = p.parentElement) {
+            if (skip.has(p.tagName.toUpperCase())) return NodeFilter.FILTER_REJECT;
+            if (p === el) break;
+        }
+        const parent = node.parentElement;
+        if (parent && parent.checkVisibility
+                && !parent.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})) {
+            return NodeFilter.FILTER_REJECT;
+        }
+        return node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+    }});
+    while (walker.nextNode()) out.push(walker.currentNode.nodeValue.trim());
+    return out.join('\\n');
+}"""
+
+
+async def visible_text(locator: Any, *, timeout: float = 1000) -> str:
+    """Visible text only: no script/style/hidden nodes."""
+    return await locator.evaluate(VISIBLE_TEXT_JS, timeout=timeout) or ""
+
+
 def plain(text: str) -> str:
     return " ".join("".join(c for c in unicodedata.normalize("NFKD", text.casefold())
                             if not unicodedata.combining(c)).split())
@@ -181,7 +209,7 @@ class BraveBrowser:
                 continue
             body = frame.locator("body")
             if await body.count():
-                text = await body.inner_text(timeout=1000)
+                text = await visible_text(body)
                 status = classify_message(text)
                 if status in {"captcha", "blocked", "session_lost"}:
                     return status, text[:4000]
@@ -287,14 +315,14 @@ class BraveBrowser:
 
     async def result_text(self, tab: RedeemTab) -> str:
         if tab.scope is not None and await tab.scope.count() and await tab.scope.is_visible():
-            return (await tab.scope.inner_text(timeout=1000))[:8000]
+            return (await visible_text(tab.scope))[:8000]
         # Some implementations replace the entire modal on success.
         for frame in tab.page.frames:
             parsed = urlsplit(frame.url)
             if parsed.hostname == "checkout.playstation.com" and parsed.path.rstrip("/") == "/voucher":
                 body = frame.locator("body")
                 if await body.count():
-                    text = await body.inner_text(timeout=1000)
+                    text = await visible_text(body)
                     if classify_message(text):
                         return text[:8000]
             for role in ("alert", "status", "dialog"):
@@ -302,7 +330,7 @@ class BraveBrowser:
                 for index in range(await items.count()):
                     item = items.nth(index)
                     if await item.is_visible():
-                        text = await item.inner_text(timeout=1000)
+                        text = await visible_text(item)
                         if classify_message(text):
                             return text[:8000]
         return ""
