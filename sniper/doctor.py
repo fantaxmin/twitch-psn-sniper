@@ -121,7 +121,7 @@ def diagnose(kick=None):
     check("Python", python_version, "Instalar Python 3.12+ y recrear el entorno virtual")
     for module, distribution in PACKAGES.items():
         check(f"Paquete {module}", lambda m=module, d=distribution: package_version(m, d),
-              "Activar el entorno y ejecutar python -m pip install -r requirements.txt")
+              "Ejecutar uv sync desde la carpeta del proyecto")
     executable = find_streamlink()
 
     def streamlink_version():
@@ -132,7 +132,7 @@ def diagnose(kick=None):
             raise RuntimeError(result.stderr[:500])
         return result.stdout.strip()
 
-    check("Streamlink", streamlink_version, "Activar el entorno e instalar streamlink con pip")
+    check("Streamlink", streamlink_version, "Ejecutar uv sync y lanzar el diagnóstico con uv run python -m sniper.doctor")
     if kick:
         def kick_flags():
             if not executable:

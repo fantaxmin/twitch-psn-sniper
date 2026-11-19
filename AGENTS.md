@@ -58,10 +58,11 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
 
 1. **Detecta el sistema** (Linux o Windows) y comprueba Python >= 3.12.
 2. **Entorno virtual e instalación**
-   - Linux: `uv sync` (GPU) o `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (CPU).
-   - Windows: ver "Instalación en Windows" en `README.md` (`py -3.12 -m venv .venv`, `pip install -r requirements.txt`).
-3. **Modelos OCR**: `python -m rapidocr.main download_models` (una vez).
-4. **Diagnóstico**: `python -m sniper.doctor --kick CANAL`. Arregla cada `✗`
+   - Ambos sistemas: instalar `uv`, ejecutar `uv python install 3.12` y `uv sync --python 3.12`.
+   - Windows selecciona ONNX Runtime CPU; Linux conserva ONNX Runtime GPU.
+   - Usar `uv run` para ejecutar los comandos; no hace falta activar `.venv` ni instalar pip.
+3. **Modelos OCR**: `uv run python -m rapidocr.main download_models` (una vez).
+4. **Diagnóstico**: `uv run python -m sniper.doctor --kick CANAL`. Arregla cada `✗`
    siguiendo su sugerencia y repite hasta que no queden errores. `--json` da salida
    legible por máquina. Es de solo lectura.
 5. **Brave dedicado**: pide a la persona que ejecute
@@ -72,18 +73,18 @@ abre la URL elegida en esa misma ventana del perfil dedicado.
 6. **Región**: pregunta el país de la cuenta PSN. Si no es Colombia, ajusta
    `STORE_URL` en `sniper/browser.py` (`es-co` -> `es-mx`, `en-us`, ...).
 7. **Zona del código**: con el stream mostrando el sorteo, corre
-   `python -m sniper.kick --channel CANAL --dry-run` y revisa los candidatos en
+   `uv run python -m sniper.kick --channel CANAL --dry-run` y revisa los candidatos en
    `runs/kick-CANAL/*/events.jsonl`. Propón un `--roi X0 Y0 X1 Y1` (0..1) que cubra
    solo el widget, sin chat ni alertas. Considera `--require-label`.
-8. **Pruebas**: `python -m pip install pytest && python -m pytest -q`. Las pruebas
+8. **Pruebas**: `uv run python -m pytest -q`. Las pruebas
    que necesitan capturas del stream se saltan si `tests/fixtures/` no existe.
 9. **Entrega**: deja a la persona el comando final
-   `python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1` para que **ella** lo ejecute.
+   `uv run python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1` para que **ella** lo ejecute.
 
 ## Pasos de configuración del bot de chat de Twitch
 
 1. **Entorno:** en Linux, comprobar Python >= 3.12 e instalar las dependencias
-   con `uv sync` o el entorno CPU descrito en `README.md`.
+   con `uv sync` según `README.md`.
 2. **Canal e intervalo:** usar el canal pedido (`--chat`, por defecto `rubius`).
    El intervalo predeterminado es 300 segundos; `--chat-interval` admite al menos
    30 segundos. Confirmar las preferencias que falten antes de activar envíos.

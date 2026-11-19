@@ -42,7 +42,7 @@ uv run python -m sniper.kick --channel "$STREAM_CHANNEL" --source "$STREAM_URL" 
 
 ### Kick · Windows (PowerShell)
 
-Con el entorno virtual activado:
+Con `uv` instalado y las dependencias preparadas con `uv sync`:
 
 ```powershell
 $streamChannel = "tu_canal"
@@ -51,14 +51,14 @@ $streamUrl = "https://kick.com/$streamChannel"
 # Abrir el perfil dedicado e iniciar sesión en PSN manualmente:
 .\scripts\launch_brave.ps1 -KickStream -Channel $streamChannel
 # También puedes abrirlo desde CMD: scripts\launch_brave.bat --kick tu_canal
-python -m sniper.doctor --kick $streamChannel
-python -m sniper.kick --channel $streamChannel --source $streamUrl --dry-run
+uv run python -m sniper.doctor --kick $streamChannel
+uv run python -m sniper.kick --channel $streamChannel --source $streamUrl --dry-run
 ```
 
 Canje real, con las coordenadas ajustadas al stream:
 
 ```powershell
-python -m sniper.kick --channel $streamChannel --source $streamUrl --redeem --roi X0 Y0 X1 Y1
+uv run python -m sniper.kick --channel $streamChannel --source $streamUrl --redeem --roi X0 Y0 X1 Y1
 ```
 
 ### Bot de chat de Twitch · Linux
@@ -148,36 +148,35 @@ el bot de chat conserva su alcance de Linux.
 
 ## Instalación en Windows
 
-Instalar Python 3.12 o posterior y Brave. Desde la carpeta del proyecto, en PowerShell:
+Instala Brave y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Con WinGet, puedes instalar `uv` desde PowerShell:
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+winget install --id=astral-sh.uv -e
 ```
 
-`requirements.txt` instala Streamlink y ONNX Runtime para CPU; no requiere GPU.
-Para tener `streamlink.exe` en PATH, activar el entorno:
+Abre una terminal nueva para que encuentre `uv`. Desde la carpeta del proyecto:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python -m sniper.doctor --kick CANAL
-python -m sniper.kick --channel CANAL
+uv python install 3.12
+uv sync --python 3.12
+uv run python -m sniper.doctor --kick CANAL
+uv run python -m sniper.kick --channel CANAL --dry-run
 ```
 
-Si la política de PowerShell impide activar el entorno, se puede trabajar desde CMD:
+`uv` instala Python, crea `.venv` e instala las versiones de `uv.lock`.
+No necesitas instalar pip ni activar el entorno virtual. Los mismos comandos
+funcionan desde PowerShell y CMD. `uv run` también coloca `streamlink.exe` del
+entorno en PATH durante la ejecución.
 
-```bat
-.venv\Scripts\activate.bat
-python -m sniper.doctor --kick CANAL
-python -m sniper.kick --channel CANAL
-```
+Windows selecciona ONNX Runtime para CPU automáticamente desde `pyproject.toml`;
+no requiere una GPU NVIDIA. Linux conserva la dependencia de ONNX Runtime GPU.
 
 Los modelos OCR deben estar disponibles localmente para que `doctor` los pruebe.
 En una instalación nueva, prepararlos una vez fuera del diagnóstico:
 
 ```powershell
-python -m rapidocr.main download_models
+uv run python -m rapidocr.main download_models
 ```
 
 La preparación puede descargar pesos. `doctor` no los descarga ni escribe archivos de campaña.
@@ -188,19 +187,21 @@ No se necesita descargar un navegador de Playwright: el canje se conecta al Brav
 Con `uv` y Brave instalados:
 
 ```bash
-uv sync
+uv python install 3.12
+uv sync --python 3.12
 uv run python -m sniper.doctor --kick CANAL
 uv run python -m sniper.kick --channel CANAL
 ```
 
-También se puede usar un entorno virtual con `pip install -r requirements.txt`
-para la variante CPU. La configuración histórica de `uv` utiliza ONNX Runtime GPU.
+La instalación sigue `pyproject.toml` y `uv.lock`. Linux conserva ONNX Runtime GPU;
+Windows selecciona ONNX Runtime CPU. Usa `uv run` para ejecutar los comandos sin
+activar el entorno manualmente.
 
 ## Comprobar el entorno
 
 ```bash
-python -m sniper.doctor --kick CANAL
-python -m sniper.doctor --kick CANAL --json
+uv run python -m sniper.doctor --kick CANAL
+uv run python -m sniper.doctor --kick CANAL --json
 ```
 
 El diagnóstico muestra `✓`, `!` o `✗`, una sugerencia para cada problema y un resumen.
@@ -219,8 +220,8 @@ Los permisos de escritura se revisan sin crear un archivo de prueba.
 Primero comprobar el formato del sorteo y probar la detección sin canjear:
 
 ```bash
-python -m sniper.kick --channel CANAL --dry-run
-python -m sniper.kick --channel CANAL --source video.mp4 --once
+uv run python -m sniper.kick --channel CANAL --dry-run
+uv run python -m sniper.kick --channel CANAL --source video.mp4 --once
 ```
 
 En real, usar `--roi X0 Y0 X1 Y1` ajustado al widget, excluyendo chat y alertas.
@@ -250,7 +251,7 @@ PATH, Program Files y LOCALAPPDATA. CDP escucha en `127.0.0.1:9333`.
 Una vez elegida la zona, activar el canje con las coordenadas comprobadas:
 
 ```bash
-python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1
+uv run python -m sniper.kick --channel CANAL --redeem --roi X0 Y0 X1 Y1
 ```
 
 Sustituir `X0 Y0 X1 Y1` por números. El programa exige al menos dos escaneos
@@ -277,7 +278,7 @@ Para resolver un timeout, detener el proceso y comprobar el resultado en la cuen
 Después actualizar el registro correspondiente, sin reenviar el código:
 
 ```bash
-python scripts/redeem_cli.py --runs-dir runs/kick-CANAL --resolve XXXX-XXXX-XXXX --as already_used
+uv run python scripts/redeem_cli.py --runs-dir runs/kick-CANAL --resolve XXXX-XXXX-XXXX --as already_used
 ```
 
 Usar el estado realmente comprobado y la ruta que aparezca en el registro de ejecución.
@@ -310,8 +311,8 @@ validación de compatibilidad con Windows. Los logs se guardan en `runs/` y no s
 ## Pruebas
 
 ```bash
-python -m pip install pytest
-python -m pytest -q
+uv sync
+uv run python -m pytest -q
 ```
 
 Las pruebas usan navegadores y canjes simulados. El OCR histórico prueba una imagen local.

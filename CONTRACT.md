@@ -61,7 +61,9 @@ Streamlink en PATH; terminate/kill detienen su subproceso. Las notificaciones so
 opcionales: notify-send en Linux y log/sonido con winsound en Windows.
 `python -m sniper.doctor --kick elded` comprueba el entorno sin iniciar navegador,
 crear registros, descargar modelos ni hacer canjes. Ver README.md para instalación
-CPU con requirements.txt y detalles de sus comprobaciones de solo lectura.
+con `uv sync` y detalles de sus comprobaciones de solo lectura. `pyproject.toml`
+selecciona ONNX Runtime CPU en Windows y GPU en Linux mediante marcadores de
+plataforma; `uv.lock` fija ambas variantes. Ejecutar los comandos con `uv run`.
 
 Por petición del usuario, `python -m sniper.daemon` ahora solo envía mensajes
 periódicos a Twitch. Conserva el contador, los registros y la captura como contexto
