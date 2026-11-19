@@ -168,6 +168,24 @@ La compatibilidad de Windows cubre Kick, `redeem_cli` y `doctor`.
 Las pruebas de Windows simulan sus APIs desde Linux; falta probar los lanzadores,
 la captura y la conexión a Brave en una máquina Windows real.
 
+## Bot de chat de Twitch
+
+El repositorio también incluye el bot de chat: `participation.py`, `reactions.py`,
+`chat_sender.py` y `daemon.py`, junto con sus pruebas. Envía mensajes periódicos
+al canal elegido y muestra una cuenta regresiva; no detecta ni canjea códigos.
+Usa la sesión de Twitch del perfil dedicado de Brave. Las reacciones pueden usar
+visión local con Ollama; si no está disponible, recurre a emotes.
+
+```bash
+# Vista previa sin conectar a Brave ni enviar mensajes:
+uv run python -m sniper.daemon --dry-run
+# Envío real a Twitch, después de iniciar sesión manualmente:
+uv run python -m sniper.daemon --chat rubius --chat-interval 300
+```
+
+Esta parte del proyecto conserva su alcance de Linux; no está incluida en la
+validación de compatibilidad con Windows. Los logs se guardan en `runs/` y no se publican.
+
 ## Pruebas
 
 ```bash
