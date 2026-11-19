@@ -14,3 +14,7 @@ __pycache__/
 
 # Capturas de streams de terceros
 tests/fixtures/
+
+# Preferencias e identidades locales del asistente de configuración
+.sniper-local.json
+.sniper-local-*.tmp

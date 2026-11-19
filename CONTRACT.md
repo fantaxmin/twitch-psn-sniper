@@ -74,6 +74,17 @@ códigos del chat ni el lector de susurros. No abre PlayStation Store y no termi
 por códigos, canjes o susurros; se detiene con Ctrl+C o al terminar la captura.
 `scripts/launch_brave.sh` abre `https://www.twitch.tv/rubius`.
 
+`uv run python -m sniper.setup` configura cuentas públicas de referencia, canal,
+intervalo/ROI y arranque. Las preferencias privadas se guardan atómicamente en
+`.sniper-local.json` (ignorado por Git; permisos 0600 en POSIX), sin contraseñas,
+correo, tokens, cookies ni accountId interno. No selecciona cuentas: reutiliza las
+sesiones guardadas del perfil dedicado de Brave. `--run` usa simulación;
+`--run --real` arranca en real y abre Brave si CDP falta. Si falta autenticación,
+el daemon/Kick termina antes de iniciar captura o enviar. La captura pública de
+Kick no requiere sesión de Kick. El modo chat generado por el asistente usa
+`--wait-first` para mostrar la cuenta regresiva antes del primer mensaje;
+los comandos directos conservan el primer mensaje inmediato salvo que usen ese flag.
+
 Mientras corre el daemon, su mensaje tiene prioridad en el cuadro del chat:
 reemplaza cualquier borrador existente antes del envío, según pidió el usuario.
 

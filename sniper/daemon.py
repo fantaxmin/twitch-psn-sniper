@@ -22,10 +22,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .capture import LatestFrame, StreamCapture
-from .chat_sender import BraveChatSender
+from .chat_sender import BraveChatSender, ChatUnavailable
 from .participation import ChatParticipation
 from .reactions import ReactionComposer
-from .session import ChatBrowserSession
+from .session import ChatBrowserSession, ChatBrowserUnavailable
 
 log = logging.getLogger("sniper")
 RUNS = Path(__file__).resolve().parent.parent / "runs"
@@ -64,7 +64,8 @@ class ChatDaemon:
             participation = ChatParticipation(
                 frames=self.frames, capture=capture, stop=self.stop, sender=sender,
                 composer=ReactionComposer(self.args.vision_model), interval=self.args.chat_interval,
-                dry_run=self.args.dry_run, event=self.event, status_display=self.status_display)
+                dry_run=self.args.dry_run, event=self.event, status_display=self.status_display,
+                wait_first=self.args.wait_first)
             capture.start()
             task = asyncio.create_task(participation.run())
             log.info("Solo chat #%s, cada %.0f s. Ctrl+C para detener. Registro: %s",
@@ -98,6 +99,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Envía mensajes periódicos al chat de Twitch con cuenta regresiva")
     parser.add_argument("--chat", default="rubius", help="Canal de Twitch (por defecto rubius)")
     parser.add_argument("--chat-interval", type=float, default=300, help="Segundos entre mensajes (300=5 min, 420=7 min)")
+    parser.add_argument("--wait-first", action="store_true", help="Inicia con la cuenta regresiva antes del primer mensaje")
     parser.add_argument("--source", help="Stream para contexto visual; por defecto el canal elegido")
     parser.add_argument("--quality", default="1080p60,1080p,best")
     parser.add_argument("--vision-model", help="Modelo de visión local de Ollama; si falta, se usan emotes")
@@ -128,10 +130,19 @@ def main(argv=None):
     try:
         asyncio.run(ChatDaemon(args, status_display=console.update if console.interactive else None).main())
     except KeyboardInterrupt:
-        pass
+        return 130
+    except ChatBrowserUnavailable as exc:
+        log.error("%s", exc)
+        if args.verbose:
+            log.debug("Detalle del fallo de conexión a Brave", exc_info=True)
+        return 1
+    except ChatUnavailable as exc:
+        log.error("No se puede iniciar el chat: %s", exc)
+        return 1
     finally:
         console.clear_status()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

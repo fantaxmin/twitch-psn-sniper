@@ -83,6 +83,21 @@ def test_five_minute_interval_and_no_catchup(monkeypatch):
     asyncio.run(scenario())
 
 
+def test_wait_first_starts_countdown_without_sending_immediately(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(time, "perf_counter", lambda: now[0])
+    async def scenario():
+        worker = participant(interval=180, wait_first=True)
+        assert "03:00" in worker.status()[1]
+        await worker.tick()
+        assert worker.sender.messages == []
+        now[0] += 180
+        worker.frames.put(np.zeros((4, 4, 3), dtype=np.uint8))
+        await worker.tick()
+        assert worker.sender.messages == ["PogChamp"]
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("condition", ["offline", "stale", "stop"])
 def test_no_post_without_fresh_live_frame(condition):
     async def scenario():

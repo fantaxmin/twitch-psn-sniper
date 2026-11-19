@@ -15,14 +15,14 @@ log = logging.getLogger(__name__)
 class ChatParticipation:
     def __init__(self, *, frames: Any, capture: Any, stop: Any, composer: Any,
                  sender: Any = None, interval: float = 300, dry_run: bool = False,
-                 event: Any = None, status_display: Any = None):
+                 event: Any = None, status_display: Any = None, wait_first: bool = False):
         if interval < 30:
             raise ValueError("El intervalo de chat debe ser al menos 30 segundos")
         self.frames, self.capture, self.stop = frames, capture, stop
         self.composer, self.sender = composer, sender
         self.interval, self.dry_run = interval, dry_run
         self.event = event or (lambda **kwargs: None)
-        self.next_due = 0.0
+        self.next_due = time.perf_counter() + interval if wait_first else 0.0
         self.last_seq = 0
         self.disabled = False
         self.status_display = status_display

@@ -31,9 +31,18 @@ real de mensajes. No declares completada una comprobación que no hayas ejecutad
 - Para configurar o probar el bot de chat, usa `--dry-run`. Inicia el envío real
   únicamente cuando la persona lo solicite; puede reemplazar borradores del chat.
 - Mantén fuera de Git `runs/`, logs, capturas, `tests/fixtures/`, entornos virtuales
-  y cachés. El código del bot y sus pruebas sí forman parte del repositorio.
+  y cachés, además de `.sniper-local.json` y sus temporales. El código del bot y
+  sus pruebas sí forman parte del repositorio.
 
 ## Elegir qué configurar
+
+El asistente local es `uv run python -m sniper.setup`. Guarda preferencias en
+`.sniper-local.json` (excluido de Git): usuarios públicos de referencia, alias PSN,
+destino y opciones. No sustituye las sesiones autenticadas de Brave. Con `--run`
+arranca en simulación; `--run --real` abre automáticamente el perfil dedicado si
+hace falta, reutiliza las sesiones existentes y arranca el bot elegido. Si falta
+autenticación, debe terminar con error antes de la captura o los envíos.
+No ejecutar el modo real para probar la configuración sin petición del usuario.
 
 Usa el objetivo indicado en la conversación. Si no se conoce, pregunta si la
 persona quiere Kick, el bot de chat de Twitch o ambos antes de configurar servicios.

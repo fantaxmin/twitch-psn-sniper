@@ -10,7 +10,19 @@ from types import SimpleNamespace
 import pytest
 
 from sniper import daemon
-from sniper.session import ChatBrowserSession
+from sniper.session import ChatBrowserSession, ChatBrowserUnavailable
+
+
+@pytest.fixture
+def main_logging(capsys):
+    yield
+    import logging
+    from sniper.console import CountdownConsole
+    for handler in list(logging.getLogger().handlers):
+        if isinstance(handler, CountdownConsole):
+            logging.getLogger().removeHandler(handler)
+            handler.stream = sys.stderr
+            handler.close()
 
 
 @pytest.fixture(autouse=True)
@@ -75,6 +87,54 @@ def test_chat_session_only_attaches_cdp_and_disconnects_driver(monkeypatch):
         assert calls == [("http://127.0.0.1:9333", {"timeout": 5000}), "driver stopped"]
         assert session.context is None
     asyncio.run(scenario())
+
+
+def test_refused_cdp_connection_has_actionable_message_and_cleans_driver(monkeypatch):
+    import playwright.async_api
+    stopped = []
+    class Chromium:
+        async def connect_over_cdp(self, *args, **kw):
+            raise playwright.async_api.Error("connect ECONNREFUSED 127.0.0.1:9333")
+    class Driver:
+        chromium = Chromium()
+        async def stop(self):
+            stopped.append(True)
+    class Manager:
+        async def start(self):
+            return Driver()
+    monkeypatch.setattr(playwright.async_api, "async_playwright", Manager)
+    monkeypatch.setattr("sniper.session.install_click_guard", lambda: None)
+    async def scenario():
+        session = ChatBrowserSession()
+        with pytest.raises(ChatBrowserUnavailable, match="scripts/launch_brave.sh") as error:
+            await session.connect()
+        assert "9333" in str(error.value) and "Twitch" in str(error.value)
+        assert session.playwright is session.browser is session.context is None
+        assert stopped == [True]
+    asyncio.run(scenario())
+
+
+def test_daemon_reports_missing_brave_with_exit_one_without_traceback(monkeypatch, capsys, main_logging):
+    async def unavailable(self):
+        raise ChatBrowserUnavailable("Abre scripts/launch_brave.sh; conexión 9333 no disponible")
+    monkeypatch.setattr(daemon.ChatDaemon, "main", unavailable)
+    assert daemon.main(["--chat", "rubius"]) == 1
+    output = capsys.readouterr().err
+    assert "scripts/launch_brave.sh" in output and "Traceback" not in output
+
+
+def test_unauthenticated_twitch_aborts_before_capture_and_has_clear_error(monkeypatch, capsys, main_logging):
+    state = services(monkeypatch)
+    async def no_auth(self):
+        raise daemon.ChatUnavailable("Falta iniciar sesión en Twitch en el perfil dedicado de Brave")
+    monkeypatch.setattr(daemon.BraveChatSender, "start", no_auth)
+    def forbidden_capture(*args, **kw):
+        raise AssertionError("No iniciar captura si falta autenticación")
+    monkeypatch.setattr(daemon, "StreamCapture", forbidden_capture)
+    assert daemon.main(["--chat", "rubius"]) == 1
+    output = capsys.readouterr().err
+    assert "iniciar sesión en Twitch" in output and "Traceback" not in output
+    assert state["session_closed"] and state["messages"] == []
 
 
 def services(monkeypatch, *, dry_run=False, fail_login=False):

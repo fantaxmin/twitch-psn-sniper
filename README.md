@@ -7,6 +7,7 @@ tras un canje exitoso. El bot de chat no busca ni canjea códigos.
 
 ## Comandos a mano
 
+[Asistente automático](#asistente-de-configuración-y-arranque) ·
 [Kick en Linux](#kick--linux) · [Kick en Windows](#kick--windows-powershell) ·
 [Chat de Twitch](#bot-de-chat-de-twitch--linux) ·
 [Instalación Linux](#instalación-en-linux) · [Instalación Windows](#instalación-en-windows) ·
@@ -17,6 +18,41 @@ Si ya instalaste el proyecto, empieza aquí. Ejecuta los comandos desde la carpe
 del repositorio. Sustituye `tu_canal` por el nombre que aparece en la URL del stream;
 por ejemplo, para `https://kick.com/elmune`, el canal es `elmune`.
 Pasa siempre `--channel` en Kick o `--chat` en Twitch para elegir el destino.
+
+### Asistente de configuración y arranque
+
+```bash
+uv run python -m sniper.setup
+```
+
+El asistente pide tus usuarios de Twitch y Kick, el ID público o alias de PSN
+(opcionales), el canal del streamer o su URL, y el intervalo de mensajes o la zona
+del código. Al terminar, eliges vista previa, arranque real o solo guardar.
+El arranque de chat empieza con la cuenta regresiva antes del primer mensaje.
+En Kick arranca la captura; el canje real requiere una ROI configurada.
+
+Para reutilizar la configuración:
+
+```bash
+# Vista previa con lo guardado:
+uv run python -m sniper.setup --run
+# Arranque real con las sesiones guardadas:
+uv run python -m sniper.setup --run --real
+```
+
+En modo real abre automáticamente el Brave dedicado si CDP no está disponible y
+reutiliza sus sesiones. Si falta la autenticación de Twitch para el chat o de PSN
+para el canje, termina con un error antes de la captura y del primer envío.
+No abre un asistente manual de autenticación durante ese arranque. La primera
+sesión debe haberse iniciado previamente en el perfil dedicado. La captura pública
+de Kick no necesita una cuenta de Kick.
+
+Los usuarios y el ID público guardados son referencias: no cambian ni seleccionan
+la cuenta autenticada de Brave. Para cambiar la cuenta que envía o canjea, inicia
+sesión con esa cuenta en el perfil dedicado. No se guardan contraseñas, correos,
+cookies, tokens ni el `accountId` interno. Las preferencias quedan únicamente en
+`.sniper-local.json`, excluido de Git; no lo compartas. En Linux se guarda con
+permisos de lectura y escritura solo para su propietario.
 
 ### Kick · Linux
 
@@ -91,6 +127,12 @@ uv run python -m sniper.daemon --chat "$STREAM_CHANNEL" --source "$STREAM_URL" -
 `420` equivale a 7 minutos. `Ctrl+C` detiene cualquiera de los procesos.
 La ejecución real del bot de chat reemplaza borradores existentes en el cuadro de envío.
 No hay bot de chat para Kick; el modo de chat conserva su alcance de Linux.
+
+Si aparece `ECONNREFUSED 127.0.0.1:9333`, el bot no pudo conectarse al Brave
+dedicado. Ejecuta `scripts/launch_brave.sh` en otra terminal, inicia sesión en
+Twitch en esa ventana y mantenla abierta. Después vuelve a ejecutar el bot.
+Un Brave abierto normalmente no expone ese puerto; el lanzador prepara el perfil
+y CDP. El bot no inicia Brave automáticamente. `--dry-run` no necesita esa conexión.
 
 ### Cambiar de streamer usando su URL
 
