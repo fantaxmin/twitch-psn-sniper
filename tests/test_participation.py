@@ -181,22 +181,28 @@ class Input:
 
 
 class Button:
-    def __init__(self):
+    def __init__(self, input_box=None, *, clears_input=True, enabled=True):
         self.clicks = 0
         self.error = None
+        self.input_box = input_box
+        self.clears_input = clears_input
+        self.enabled = enabled
 
     async def is_enabled(self):
-        return True
+        return self.enabled
 
     async def click(self, **kwargs):
         self.clicks += 1
         if self.error:
             raise self.error
+        if self.clears_input and self.input_box is not None:
+            self.input_box.value = ""
 
 
 def fake_sender():
-    sender = BraveChatSender(None, "rubius", stop=threading.Event())
-    sender.input, sender.send_button = Input(), Button()
+    sender = BraveChatSender(None, "rubius", stop=threading.Event(), send_button_timeout=0.1)
+    sender.input = Input()
+    sender.send_button = Button(sender.input)
     async def refresh():
         pass
     async def notice():
@@ -372,4 +378,288 @@ def test_urgent_raffle_bypasses_only_local_cooldown_and_respects_twitch_slow_mod
         with pytest.raises(ChatUnavailable):
             await sender.send_raffle("coco")
         assert sender.send_button.clicks == 1
+    asyncio.run(scenario())
+
+
+def _mock_twitch_page(*, slate=False, initial_button_enabled=True, button_label="Chatear",
+                      has_target_attr=False, replace_button_on_input=False):
+    class Element:
+        def __init__(self, *, visible=True, editable=True, enabled=True, aria_disabled=None,
+                     attrs=None, text="", on_click=None):
+            self.visible = visible
+            self.editable = editable
+            self.enabled = enabled
+            self.aria_disabled = aria_disabled
+            self.attrs = attrs or {}
+            self.text = text
+            self.value = ""
+            self.clicks = 0
+            self.fill_calls = 0
+            self.on_click = on_click
+
+        async def count(self):
+            return 1 if self.visible else 0
+
+        def nth(self, index):
+            return self
+
+        async def is_visible(self):
+            return self.visible
+
+        async def is_editable(self):
+            return self.editable
+
+        async def is_enabled(self):
+            return self.enabled
+
+        async def get_attribute(self, name):
+            if name == "aria-disabled":
+                return self.aria_disabled
+            return self.attrs.get(name)
+
+        async def inner_text(self, **kwargs):
+            return self.text
+
+        async def fill(self, value, **kwargs):
+            self.fill_calls += 1
+            self.value = value
+            if value and on_text_entered is not None:
+                on_text_entered()
+
+        async def evaluate(self, *args):
+            return self.value
+
+        async def click(self, **kwargs):
+            self.clicks += 1
+            if self.on_click is not None:
+                self.on_click()
+
+    state = {
+        "submitted": [],
+        "keys": [],
+        "enable_checks": 0,
+        "button_replaced": False,
+        "clears_on_click": True,
+    }
+    input_attrs = {"data-slate-editor": "true", "contenteditable": "true"} if slate else {}
+    chat_input = Element(visible=True, editable=True, attrs=input_attrs)
+    login_button = Element(visible=False)
+    notice = Element(visible=False, text="")
+    empty = Element(visible=False)
+
+    def handle_send_click():
+        state["submitted"].append(chat_input.value)
+        if state["clears_on_click"]:
+            chat_input.value = ""
+
+    stale_button = Element(visible=True, enabled=initial_button_enabled, on_click=handle_send_click)
+    live_button = Element(visible=True, enabled=False, on_click=handle_send_click)
+    state["active_button"] = stale_button
+
+    def on_text_entered():
+        if replace_button_on_input:
+            state["button_replaced"] = True
+            state["active_button"] = live_button
+        elif not initial_button_enabled:
+            state["active_button"].enabled = True
+
+    class Keyboard:
+        async def press(self, key):
+            state["keys"].append(("press", key))
+            if key == "Backspace":
+                chat_input.value = ""
+
+        async def insert_text(self, text):
+            state["keys"].append(("insert_text", text))
+            chat_input.value = text
+            on_text_entered()
+
+    class Page:
+        url = "https://www.twitch.tv/rubius"
+        keyboard = Keyboard()
+
+        def is_closed(self):
+            return False
+
+        def locator(self, selector):
+            if "login-button" in selector:
+                return login_button
+            if "chat-input-error" in selector:
+                return notice
+            if "chat-send-button" in selector:
+                return state["active_button"] if has_target_attr else empty
+            if slate and "contenteditable" in selector:
+                return chat_input
+            if not slate and "textarea" in selector:
+                return chat_input
+            return empty
+
+        def get_by_role(self, role, *, name=None):
+            if role == "button" and name is not None and name.search(button_label):
+                return state["active_button"]
+            return empty
+
+    return Page(), state, chat_input, stale_button, live_button, notice
+
+
+def test_sender_waits_for_send_button_to_enable_and_relocates_replaced_button(monkeypatch):
+    from sniper import chat_sender
+    async def no_sleep(delay):
+        pass
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", no_sleep)
+    page, state, chat_input, stale_button, live_button, _ = _mock_twitch_page(
+        initial_button_enabled=False,
+        button_label="Chatear",
+        has_target_attr=False,
+        replace_button_on_input=True,
+    )
+    original_enabled = live_button.is_enabled
+
+    async def delayed_enable():
+        state["enable_checks"] += 1
+        if state["enable_checks"] >= 3:
+            live_button.enabled = True
+        return await original_enabled()
+
+    live_button.is_enabled = delayed_enable
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius", stop=threading.Event(), send_button_timeout=0.5)
+
+    async def scenario():
+        await sender.start()
+        assert sender.send_button is stale_button
+        await sender.send("PogChamp")
+        assert stale_button.clicks == 0
+        assert live_button.clicks == 1
+        assert state["submitted"] == ["PogChamp"]
+        assert state["enable_checks"] == 3
+        assert chat_input.value == ""
+
+    asyncio.run(scenario())
+
+
+def test_sender_uses_slate_keyboard_input_for_contenteditable_chat_box(monkeypatch):
+    from sniper import chat_sender
+    async def no_sleep(delay):
+        pass
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", no_sleep)
+    page, state, chat_input, button, _, _ = _mock_twitch_page(
+        slate=True,
+        initial_button_enabled=False,
+        has_target_attr=True,
+    )
+    chat_input.value = "borrador previo"
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius", stop=threading.Event(), send_button_timeout=0.5)
+
+    async def scenario():
+        await sender.start()
+        await sender.send("PogChamp")
+        assert chat_input.fill_calls == 0
+        assert chat_input.clicks == 1
+        assert state["keys"] == [
+            ("press", "ControlOrMeta+A"),
+            ("press", "Backspace"),
+            ("insert_text", "PogChamp"),
+        ]
+        assert button.clicks == 1
+        assert state["submitted"] == ["PogChamp"]
+        assert chat_input.value == ""
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mode", ["missing", "disabled", "aria_disabled"])
+def test_missing_or_disabled_send_button_fails_and_participation_does_not_report_sent(monkeypatch, caplog, mode):
+    import logging
+    from sniper import chat_sender
+    caplog.set_level(logging.INFO)
+    async def no_sleep(delay):
+        pass
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", no_sleep)
+    page, state, chat_input, button, _, _ = _mock_twitch_page(has_target_attr=True)
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius", stop=threading.Event(), send_button_timeout=0.1)
+    events = []
+    frames = LatestFrame()
+    frames.put(np.zeros((4, 4, 3), dtype=np.uint8))
+    live = threading.Event()
+    live.set()
+    worker = ChatParticipation(
+        frames=frames,
+        capture=SimpleNamespace(live=live),
+        stop=threading.Event(),
+        composer=Composer(),
+        sender=sender,
+        event=lambda **kw: events.append(kw),
+    )
+
+    original_fill = chat_input.fill
+
+    async def fill_with_broken_button(value, **kwargs):
+        await original_fill(value, **kwargs)
+        if value:
+            if mode == "missing":
+                button.visible = False
+            elif mode == "disabled":
+                button.enabled = False
+            else:
+                button.aria_disabled = "true"
+
+    chat_input.fill = fill_with_broken_button
+
+    async def scenario():
+        await worker.tick()
+        assert button.clicks == 0
+        assert chat_input.value == ""
+        assert worker.sent_count == 0
+        assert worker.last_message is None
+        assert worker.composer.history == []
+        assert "CHAT ENVIADO" not in caplog.text
+        assert any(e["kind"] == "chat_unavailable" for e in events)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mode", ["spanish_rejection", "stuck_in_input"])
+def test_twitch_rejection_notice_or_unsent_input_is_not_reported_as_sent(monkeypatch, caplog, mode):
+    import logging
+    from sniper import chat_sender
+    caplog.set_level(logging.INFO)
+    async def no_sleep(delay):
+        pass
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", no_sleep)
+    page, state, chat_input, button, _, notice = _mock_twitch_page(has_target_attr=True)
+    if mode == "stuck_in_input":
+        state["clears_on_click"] = False
+    else:
+        original_on_click = button.on_click
+        def reject_on_click():
+            original_on_click()
+            notice.visible = True
+            notice.text = "Tu mensaje no se envió porque es idéntico al anterior"
+        button.on_click = reject_on_click
+
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius", stop=threading.Event(), send_button_timeout=0.1)
+    events = []
+    frames = LatestFrame()
+    frames.put(np.zeros((4, 4, 3), dtype=np.uint8))
+    live = threading.Event()
+    live.set()
+    worker = ChatParticipation(
+        frames=frames,
+        capture=SimpleNamespace(live=live),
+        stop=threading.Event(),
+        composer=Composer(),
+        sender=sender,
+        event=lambda **kw: events.append(kw),
+    )
+
+    async def scenario():
+        await worker.tick()
+        assert button.clicks == 1
+        assert chat_input.value == ""
+        assert worker.sent_count == 0
+        assert worker.last_message is None
+        assert worker.composer.history == []
+        assert "CHAT ENVIADO" not in caplog.text
+        assert any(e["kind"] == "chat_unavailable" for e in events)
+
     asyncio.run(scenario())

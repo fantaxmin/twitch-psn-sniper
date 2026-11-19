@@ -616,10 +616,14 @@ def test_windows_raffle_ignores_local_cooldown_but_respects_twitch_slow_mode(mon
 
     submitted = []
     chat_input = FakeElement(visible=True, editable=True)
+    def submit_click():
+        submitted.append((now[0], chat_input.value))
+        chat_input.value = ""
+
     send_button = FakeElement(
         visible=True,
         enabled=True,
-        on_click=lambda: submitted.append((now[0], chat_input.value)),
+        on_click=submit_click,
     )
     login_button = FakeElement(visible=False)
     notice_el = FakeElement(visible=False, text="")
