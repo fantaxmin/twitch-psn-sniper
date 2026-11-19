@@ -47,6 +47,13 @@ No abre un asistente manual de autenticación durante ese arranque. La primera
 sesión debe haberse iniciado previamente en el perfil dedicado. La captura pública
 de Kick no necesita una cuenta de Kick.
 
+La sesión del perfil dedicado es independiente de tu Brave habitual. Escribir tu
+usuario en el asistente no inicia sesión: debe existir una sesión guardada en esa
+ventana. Al arrancar, el bot espera hasta 15 segundos a que el chat esté listo,
+también si la pestaña ya estaba abierta. Un cuadro ausente o no editable se informa
+como chat no disponible; solo un botón visible de inicio de sesión produce el
+mensaje específico de autenticación.
+
 Los usuarios y el ID público guardados son referencias: no cambian ni seleccionan
 la cuenta autenticada de Brave. Para cambiar la cuenta que envía o canjea, inicia
 sesión con esa cuenta en el perfil dedicado. No se guardan contraseñas, correos,

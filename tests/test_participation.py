@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 
 from sniper.capture import LatestFrame
-from sniper.chat_sender import BraveChatSender, ChatRestricted, ChatUnavailable
+from sniper.chat_sender import (BraveChatSender, ChatRestricted, ChatUnavailable,
+                               ChatAuthenticationRequired, ChatNotReady)
 from sniper.participation import ChatParticipation
 from sniper.reactions import EMOTES, ReactionComposer, clean_reaction
 
@@ -288,3 +289,65 @@ def test_shutdown_closes_daemon_tabs_and_leaves_user_tabs(tmp_path):
         await chat.close()
         assert not user.closed
     asyncio.run(scenario())
+
+
+def test_start_waits_for_existing_page_to_finish_loading(monkeypatch):
+    from sniper import chat_sender
+    now = [0.0]
+    monkeypatch.setattr(chat_sender.time, "monotonic", lambda: now[0])
+    async def sleep(delay):
+        now[0] += delay
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", sleep)
+    page = SimpleNamespace(url="https://www.twitch.tv/rubius", is_closed=lambda: False)
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius")
+    calls = []
+    async def refresh():
+        calls.append(True)
+        if len(calls) < 3:
+            raise ChatNotReady("El chat está cargando")
+    monkeypatch.setattr(sender, "refresh", refresh)
+    asyncio.run(sender.start())
+    assert sender.page is page and not sender.owned
+    assert len(calls) == 3 and now[0] == 0.5
+
+
+def test_start_missing_auth_fails_immediately_without_waiting(monkeypatch):
+    from sniper import chat_sender
+    page = SimpleNamespace(url="https://www.twitch.tv/rubius", is_closed=lambda: False)
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius")
+    async def refresh():
+        raise ChatAuthenticationRequired("Twitch muestra Iniciar sesión")
+    async def forbidden(delay):
+        raise AssertionError("No esperar ni insistir si falta autenticación explícitamente")
+    monkeypatch.setattr(sender, "refresh", refresh)
+    monkeypatch.setattr(chat_sender.asyncio, "sleep", forbidden)
+    with pytest.raises(ChatAuthenticationRequired):
+        asyncio.run(sender.start())
+
+
+def test_start_loading_timeout_is_not_reported_as_missing_auth(monkeypatch):
+    page = SimpleNamespace(url="https://www.twitch.tv/rubius", is_closed=lambda: False)
+    sender = BraveChatSender(SimpleNamespace(pages=[page]), "rubius", start_timeout=0)
+    async def refresh():
+        raise ChatNotReady("Chat cerrado")
+    monkeypatch.setattr(sender, "refresh", refresh)
+    with pytest.raises(ChatNotReady, match="No se confirmó que falte iniciar sesión"):
+        asyncio.run(sender.start())
+
+
+@pytest.mark.parametrize("login,editable,expected", [(True, False, ChatAuthenticationRequired),
+                                                   (False, False, ChatNotReady)])
+def test_refresh_distinguishes_login_from_uneditable_input(monkeypatch, login, editable, expected):
+    from sniper import chat_sender
+    sender = BraveChatSender(None, "rubius")
+    sender.page = SimpleNamespace(url="https://www.twitch.tv/rubius", is_closed=lambda: False,
+                                  locator=lambda selector: selector)
+    async def visible(locator):
+        if locator == '[data-a-target="login-button"]':
+            return object() if login else None
+        return SimpleNamespace(is_editable=editable_value)
+    async def editable_value():
+        return editable
+    monkeypatch.setattr(chat_sender, "visible_first", visible)
+    with pytest.raises(expected):
+        asyncio.run(sender.refresh())

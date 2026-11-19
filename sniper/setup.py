@@ -150,8 +150,13 @@ def start(config, *, real=False):
         print("Reutilizando las sesiones guardadas del perfil dedicado de Brave...", flush=True)
         print("Las cuentas guardadas son referencias; se utiliza la sesión autenticada de Brave.", flush=True)
         ensure_browser(url)
-    print("Arrancando " + ("chat con contador" if config["mode"] == "twitch-chat" else "captura de códigos")
-          + (" en modo real." if real else " en vista previa."), flush=True)
+    if real:
+        print("Preparando " + ("Twitch: comprobar sesión y cargar el chat antes de iniciar el contador."
+                                 if config["mode"] == "twitch-chat"
+                                 else "PSN: comprobar sesión antes de iniciar la captura de códigos."), flush=True)
+    else:
+        print("Arrancando " + ("chat con contador" if config["mode"] == "twitch-chat" else "captura de códigos")
+              + " en vista previa.", flush=True)
     return subprocess.run(cmd, cwd=ROOT, check=False).returncode
 
 

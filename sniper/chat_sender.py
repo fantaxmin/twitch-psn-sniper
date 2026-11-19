@@ -19,8 +19,16 @@ class ChatRestricted(ChatUnavailable):
     pass
 
 
+class ChatAuthenticationRequired(ChatUnavailable):
+    pass
+
+
+class ChatNotReady(ChatUnavailable):
+    pass
+
+
 class BraveChatSender:
-    def __init__(self, context: Any, channel: str, *, stop: Any = None):
+    def __init__(self, context: Any, channel: str, *, stop: Any = None, start_timeout: float = 15):
         if not re.fullmatch(r"[a-zA-Z0-9_]{1,25}", channel):
             raise ValueError("Canal de Twitch inválido")
         self.context = context
@@ -33,6 +41,7 @@ class BraveChatSender:
         self.next_allowed = 0.0
         self.restricted = False
         self.stop = stop
+        self.start_timeout = start_timeout
 
     async def start(self) -> None:
         if self.page is None or self.page.is_closed():
@@ -45,11 +54,23 @@ class BraveChatSender:
                 self.page = await self.context.new_page()
                 self.owned = True
                 await self.page.goto(f"https://www.twitch.tv/{self.channel}", wait_until="domcontentloaded", timeout=30000)
-                try:
-                    await self.page.locator('[data-a-target="chat-input"], [data-slate-editor="true"][contenteditable="true"]').first.wait_for(state="visible", timeout=15000)
-                except Exception as exc:
-                    raise ChatUnavailable("El chat no está listo; inicia sesión en Twitch en este perfil de Brave") from exc
-        await self.refresh()
+        # El asistente puede haber abierto esta pestaña hace unos milisegundos.
+        # Esperar también cuando se reutiliza; DOMContentLoaded no garantiza chat listo.
+        deadline = time.monotonic() + self.start_timeout
+        while True:
+            if self.stop is not None and self.stop.is_set():
+                raise ChatUnavailable("Daemon detenido; preparación del chat cancelada")
+            try:
+                await self.refresh()
+                return
+            except ChatNotReady as exc:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ChatNotReady(
+                        "El chat no estuvo listo tras esperar su carga. Abre el chat en la "
+                        "ventana del Brave dedicado y comprueba si Twitch muestra un aviso. "
+                        "No se confirmó que falte iniciar sesión. Detalle: " + str(exc)) from exc
+                await asyncio.sleep(min(0.25, remaining))
 
     async def refresh(self) -> None:
         if self.restricted:
@@ -60,17 +81,22 @@ class BraveChatSender:
         if parsed.hostname not in {"www.twitch.tv", "twitch.tv"} or parsed.path.rstrip("/").lower() != f"/{self.channel}":
             raise ChatUnavailable("La pestaña cambió de canal; no se enviará el mensaje")
         if await visible_first(self.page.locator('[data-a-target="login-button"]')) is not None:
-            raise ChatUnavailable("Falta iniciar sesión en Twitch en el perfil dedicado de Brave")
+            raise ChatAuthenticationRequired(
+                "Twitch muestra Iniciar sesión en el perfil dedicado de Brave. "
+                "Inicia sesión en esa ventana y vuelve a arrancar el bot. "
+                "Guardar tu nombre de usuario en la configuración no autentica la cuenta.")
         # Scope all text checks to the chat input UI, never to messages from viewers.
         area = await visible_first(self.page.locator('[data-a-target="chat-input"], [data-slate-editor="true"][contenteditable="true"]'))
-        if area is None or not await area.is_editable():
-            raise ChatUnavailable("Inicia sesión en Twitch en el perfil dedicado de Brave para participar")
+        if area is None:
+            raise ChatNotReady("No se encontró un cuadro de chat visible; puede estar cargando o cerrado")
+        if not await area.is_editable():
+            raise ChatNotReady("El cuadro de chat está visible pero Twitch todavía no permite escribir")
         self.input = area
         self.send_button = await visible_first(self.page.locator('[data-a-target="chat-send-button"]'))
         if self.send_button is None:
             self.send_button = await visible_first(self.page.get_by_role("button", name=re.compile(r"^(?:chat|enviar|send)$", re.I)))
         if self.send_button is None:
-            raise ChatUnavailable("No se encontró el botón para enviar al chat")
+            raise ChatNotReady("No se encontró el botón para enviar al chat")
         notice = await self._notice()
         lower = notice.casefold()
         if re.search(r"(?:se te ha|has sido).*(?:vetado|suspendido)|you (?:are|have been).*(?:banned|timed out)|no puedes enviar mensajes", lower):
