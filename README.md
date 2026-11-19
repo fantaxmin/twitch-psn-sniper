@@ -22,8 +22,28 @@ Todo lo que el programa genera (registro de intentos, capturas del modal de PSN,
 logs) va a `runs/`. Esa carpeta **contiene tu correo y `accountId`** porque copia
 el texto del modal de PSN: está en `.gitignore` y no debe subirse ni compartirse.
 
-Para que una IA (Codex, Claude Code, etc.) te configure el proyecto, ver
-[`AGENTS.md`](AGENTS.md).
+## Configuración asistida con AGENTS.md
+
+[`AGENTS.md`](AGENTS.md) es la guía del repositorio para una IA que te ayude a
+configurarlo. Explica cómo preparar tanto la alternativa Kick como el bot de chat
+de Twitch, qué comprobar y cómo proteger tus datos.
+
+Con acceso a la carpeta y los permisos necesarios, la IA puede automatizar la
+comprobación de Python, la instalación de dependencias, el diagnóstico de Kick,
+las pruebas y la preparación de los comandos de uso. El archivo no se ejecuta
+por sí solo: contiene las instrucciones que la IA debe seguir. El inicio de sesión
+en Brave se hace a mano; el canje y el envío real de mensajes se activan cuando los pidas.
+
+Abre el proyecto con tu asistente de código y dale una de estas instrucciones:
+
+> Lee AGENTS.md y configura la alternativa Kick para elded. Prueba la detección sin canjear.
+
+> Lee AGENTS.md y configura el bot de chat de Twitch para rubius, cada 5 minutos. Usa primero la vista previa sin enviar mensajes.
+
+La guía distingue las dos funciones: Kick utiliza PSN y OCR; el bot de chat usa
+tu sesión de Twitch y puede reaccionar con emotes sin configurar PSN ni modelos OCR.
+También indica que el soporte de Windows corresponde a Kick, `redeem_cli` y `doctor`;
+el bot de chat conserva su alcance de Linux.
 
 ## Instalación en Windows
 
