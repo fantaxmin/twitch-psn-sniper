@@ -1,0 +1,16 @@
+# Datos privados: registros de canje, logs, capturas de PSN (correo, accountId)
+runs/
+*.log
+*.png
+*.mp4
+*.jsonl
+
+# Entornos y cachés
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Capturas de streams de terceros
+tests/fixtures/
